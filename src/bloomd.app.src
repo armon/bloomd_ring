@@ -1,0 +1,14 @@
+%% -*- erlang -*-
+{application, bloomd,
+ [
+  {description, ""},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib,
+                  riak_core
+                 ]},
+  {mod, { bloomd_app, []}},
+  {env, []}
+ ]}.

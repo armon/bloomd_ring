@@ -1,5 +1,7 @@
-.eunit
-deps
-*.o
 *.beam
-*.plt
+.eunit
+deps/*
+ebin/*
+rel/bloomd
+dev
+apps/bloomd/src/*

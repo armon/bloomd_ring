@@ -1,4 +1,13 @@
-bloomd_ring
-===========
+bloomd: A Riak Core Application
+======================================
 
-Provides a Riak core interface to bloomd to allow for horizontal scalability and high availability
+Application Structure
+---------------------
+
+This is a blank riak core application. To get started, you'll want to edit the
+following files:
+
+* `src/riak_bloomd_vnode.erl`
+  * Implementation of the riak_core_vnode behaviour
+* `src/bloomd.erl`
+  * Public API for interacting with your vnode
