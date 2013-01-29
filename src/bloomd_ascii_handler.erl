@@ -92,10 +92,60 @@ process_buffer(State, Buffer) ->
             process_buffer(S1, Buf)
     end.
 
+%%%
+% process_cmd inspects the line to determine which command is
+% being invoked, parses the arguments and formats the responses.
+%%%
+
+process_cmd(State=#state{socket=Sock}, <<"c ", _Rest/binary>>) ->
+    State;
+process_cmd(State=#state{socket=Sock}, <<"check ", _Rest/binary>>) ->
+    State;
+
+process_cmd(State=#state{socket=Sock}, <<"m ", _Rest/binary>>) ->
+    State;
+process_cmd(State=#state{socket=Sock}, <<"multi ", _Rest/binary>>) ->
+    State;
+
+
+process_cmd(State=#state{socket=Sock}, <<"s ", _Rest/binary>>) ->
+    State;
+process_cmd(State=#state{socket=Sock}, <<"set ", _Rest/binary>>) ->
+    State;
+
+process_cmd(State=#state{socket=Sock}, <<"b ", _Rest/binary>>) ->
+    State;
+process_cmd(State=#state{socket=Sock}, <<"bulk ", _Rest/binary>>) ->
+    State;
+
+process_cmd(State=#state{socket=Sock}, <<"info ", _Rest/binary>>) ->
+    State;
+
+process_cmd(State=#state{socket=Sock}, <<"drop ", _Rest/binary>>) ->
+    State;
+
+process_cmd(State=#state{socket=Sock}, <<"close ", _Rest/binary>>) ->
+    State;
+
+process_cmd(State=#state{socket=Sock}, <<"clear ", _Rest/binary>>) ->
+    State;
+
+process_cmd(State=#state{socket=Sock}, <<"create ", _Rest/binary>>) ->
+    State;
+
+process_cmd(State=#state{socket=Sock}, <<"list">>) ->
+    State;
+
+% Handle the filter vs no-filter case
+process_cmd(State=#state{socket=Sock}, <<"flush ", _Rest/binary>>) ->
+    State;
+process_cmd(State=#state{socket=Sock}, <<"flush">>) ->
+    State;
+
 
 % Catch all for an undefined command
 process_cmd(State=#state{socket=Sock}, _) ->
-    gen_tcp:send(Sock, <<"Client Error: Unrecognized command\n">>), State.
+    gen_tcp:send(Sock, [?CLIENT_ERR, ?CMD_NOT_SUP, ?NEWLINE]), State.
 
 
 % Sends a list oriented response as
