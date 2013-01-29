@@ -13,6 +13,22 @@
 -define(START, <<"START\n">>).
 -define(END, <<"END\n">>).
 -define(SPACE, <<" ">>).
+-define(CLIENT_ERR, <<"Client Error: ">>).
+-define(CMD_NOT_SUP, <<"Command not supported">>).
+-define(BAD_ARGS, <<"Bad arguments">>).
+-define(UNEXPECTED_ARGS, <<"Unexpected arguments">>).
+-define(FILT_KEY_NEEDED, <<"Must provide filter name and key">>).
+-define(FILT_NEEDED, <<"Must provide filter name">>).
+-define(BAD_FILT_NAME, <<"Bad filter name">>).
+-define(INTERNAL_ERR, <<"Internal Error\n">>).
+-define(FILT_NOT_EXIST, <<"Filter does not exist\n">>).
+-define(FILT_NOT_PROXIED, <<"Filter is not proxied. Close it first.\n">>).
+-define(EXISTS, <<"Exists\n">>).
+-define(YES_SPACE, <<"Yes ">>).
+-define(NO_SPACE, <<"No ">>).
+-define(YES_RESP, <<"Yes\n">>).
+-define(NO_RESP, <<"No\n">>).
+-define(VALID_FILT_RE, "^[a-zA-Z0-9._-]{1,200}$").
 
 
 -ifdef(TEST).
