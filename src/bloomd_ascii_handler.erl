@@ -97,42 +97,26 @@ process_buffer(State, Buffer) ->
 % being invoked, parses the arguments and formats the responses.
 %%%
 
-process_check(State=#state{socket=Sock}, Rest) ->
-    filter_key_needed(fun(Filter, Keys) ->
-        % Ensure only a single key
-        case Keys of
-            [Key] ->
-                _Result = bloomd:check(Filter, Key),
-                % TODO: handle response
-                State;
-
-            _ ->
-                gen_tcp:send(Sock, [?CLIENT_ERR, ?UNEXPECTED_ARGS, ?NEWLINE]),
-                State
-        end
-    end, Rest, State).
-
-
 process_cmd(State, <<"c ", Rest/binary>>) ->
     process_check(State, Rest);
 process_cmd(State, <<"check ", Rest/binary>>) ->
     process_check(State, Rest);
 
-process_cmd(State=#state{socket=Sock}, <<"m ", _Rest/binary>>) ->
-    State;
-process_cmd(State=#state{socket=Sock}, <<"multi ", _Rest/binary>>) ->
-    State;
+process_cmd(State, <<"m ", Rest/binary>>) ->
+    process_multi(State, Rest);
+process_cmd(State, <<"multi ", Rest/binary>>) ->
+    process_multi(State, Rest);
 
 
-process_cmd(State=#state{socket=Sock}, <<"s ", _Rest/binary>>) ->
-    State;
-process_cmd(State=#state{socket=Sock}, <<"set ", _Rest/binary>>) ->
-    State;
+process_cmd(State, <<"s ", Rest/binary>>) ->
+    process_set(State, Rest);
+process_cmd(State, <<"set ", Rest/binary>>) ->
+    process_set(State, Rest);
 
-process_cmd(State=#state{socket=Sock}, <<"b ", _Rest/binary>>) ->
-    State;
-process_cmd(State=#state{socket=Sock}, <<"bulk ", _Rest/binary>>) ->
-    State;
+process_cmd(State, <<"b ", Rest/binary>>) ->
+    process_bulk(State, Rest);
+process_cmd(State, <<"bulk ", Rest/binary>>) ->
+    process_bulk(State, Rest);
 
 process_cmd(State=#state{socket=Sock}, <<"info ", _Rest/binary>>) ->
     State;
@@ -162,6 +146,43 @@ process_cmd(State=#state{socket=Sock}, <<"flush">>) ->
 % Catch all for an undefined command
 process_cmd(State=#state{socket=Sock}, _) ->
     gen_tcp:send(Sock, [?CLIENT_ERR, ?CMD_NOT_SUP, ?NEWLINE]), State.
+
+%%%
+% Shared command processors, for re-use if a command
+% supports aliasing
+%%%
+
+process_check(State, Rest) ->
+    filter_key_needed(fun(Filter, [Key]) ->
+        _Result = bloomd:check(Filter, Key),
+        % TODO: handle response
+        State
+    end, Rest, State).
+
+
+process_multi(State, Rest) ->
+    filter_keys_needed(fun(Filter, Keys) ->
+        _Result = bloomd:multi(Filter, Keys),
+        % TODO: handle response
+        State
+    end, Rest, State).
+
+
+process_set(State, Rest) ->
+    filter_key_needed(fun(Filter, [Key]) ->
+        _Result = bloomd:set(Filter, Key),
+        % TODO: handle response
+        State
+    end, Rest, State).
+
+
+process_bulk(State, Rest) ->
+    filter_keys_needed(fun(Filter, Keys) ->
+        _Result = bloomd:bulk(Filter, Keys),
+        % TODO: handle response
+        State
+    end, Rest, State).
+
 
 %%%
 % Helpers
