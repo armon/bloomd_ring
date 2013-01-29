@@ -10,5 +10,8 @@
                   riak_core
                  ]},
   {mod, { bloomd_app, []}},
-  {env, []}
+  {env, [
+    {bloomd_ascii_port, 8683},
+    {bloomd_accept_pool, 8}
+  ]}
  ]}.
