@@ -97,10 +97,26 @@ process_buffer(State, Buffer) ->
 % being invoked, parses the arguments and formats the responses.
 %%%
 
-process_cmd(State=#state{socket=Sock}, <<"c ", _Rest/binary>>) ->
-    State;
-process_cmd(State=#state{socket=Sock}, <<"check ", _Rest/binary>>) ->
-    State;
+process_check(State=#state{socket=Sock}, Rest) ->
+    filter_key_needed(fun(Filter, Keys) ->
+        % Ensure only a single key
+        case Keys of
+            [Key] ->
+                _Result = bloomd:check(Filter, Key),
+                % TODO: handle response
+                State;
+
+            _ ->
+                gen_tcp:send(Sock, [?CLIENT_ERR, ?UNEXPECTED_ARGS, ?NEWLINE]),
+                State
+        end
+    end, Rest, State).
+
+
+process_cmd(State, <<"c ", Rest/binary>>) ->
+    process_check(State, Rest);
+process_cmd(State, <<"check ", Rest/binary>>) ->
+    process_check(State, Rest);
 
 process_cmd(State=#state{socket=Sock}, <<"m ", _Rest/binary>>) ->
     State;
@@ -147,6 +163,64 @@ process_cmd(State=#state{socket=Sock}, <<"flush">>) ->
 process_cmd(State=#state{socket=Sock}, _) ->
     gen_tcp:send(Sock, [?CLIENT_ERR, ?CMD_NOT_SUP, ?NEWLINE]), State.
 
+%%%
+% Helpers
+%%%
+
+% This helper method checks that a filter name is provided
+% as well as key arguments. If this condition is not met,
+% then a client error is generated. Otherwise, the provided
+% function of arity 2 is invoked with the filter and key(s).
+filter_key_needed(Func, Remain, State) ->
+    filter_keys_needed(Func, Remain, State, true).
+filter_keys_needed(Func, Remain, State) ->
+    filter_keys_needed(Func, Remain, State, false).
+
+filter_keys_needed(Func, Remain, State, SingleKey) ->
+    case binary:split(Remain, [<<" ">>], [global]) of
+        % Ensure we have a filter and at least one key
+        [_] ->
+            gen_tcp:send(State#state.socket, [?CLIENT_ERR, ?FILT_KEY_NEEDED, ?NEWLINE]), State;
+
+        [Filter | Keys] ->
+            % Validate the filter
+            case valid_filter(Filter) of
+                true ->
+                    % Handle the case of single key required
+                    case Keys of
+                        [_First, _Second | _Tail] when SingleKey ->
+                            gen_tcp:send(State#state.socket,
+                                 [?CLIENT_ERR, ?UNEXPECTED_ARGS, ?NEWLINE]),
+                            State;
+
+                        _ -> Func(Filter, Keys)
+                    end;
+
+                % Handle bad filter names
+                _ ->
+                    gen_tcp:send(State#state.socket,
+                                 [?CLIENT_ERR, ?BAD_FILT_NAME, ?NEWLINE]),
+                    State
+            end
+    end.
+
+
+% Checks if a filter name is valid
+valid_filter(Filter) ->
+    % Get the cached regex
+    Re = case get(filter_re) of
+        undefined ->
+            {ok, R} = re:compile(?VALID_FILT_RE),
+            put(filter_re, R),
+            R;
+        X -> X
+    end,
+
+    % Check for a match
+    case re:run(Filter, Re) of
+        {match, _} -> true;
+        _ -> false
+    end.
 
 % Sends a list oriented response as
 % START
