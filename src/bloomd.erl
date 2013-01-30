@@ -20,41 +20,51 @@ create(_Filter, _OptionsList) ->
 
 %% @doc Lists all the existing filters using a covering set query
 list() ->
+    lager:info("Info called"),
     {ok, []}.
 
 %% @doc Drops a filter
-drop(_Filter) ->
+drop(Filter) ->
+    lager:info("Drop called on: ~p", [Filter]),
     ok.
 
 %% @doc Closes a filter
-close(_Filter) ->
+close(Filter) ->
+    lager:info("Close called on: ~p", [Filter]),
     ok.
 
 %% @doc Removes a filter from the bloomd internal manager
-clear(_Filter) ->
+clear(Filter) ->
+    lager:info("Clear called on: ~p", [Filter]),
     ok.
 
 %% @doc Checks for a key in a filter
-check(_Filter, _Key) ->
+check(Filter, Key) ->
+    lager:info("Check called on: ~p for: ~p", [Filter, Key]),
     ok.
 
 %% @doc Checks for multiple keys in a filter
-multi(_Filter, _Keys) ->
+multi(Filter, Keys) ->
+    lager:info("Multi called on: ~p for: ~p", [Filter, Keys]),
     ok.
 
 %% @doc Sets a key in a filter
-set(_Filter, _Key) ->
+set(Filter, Key) ->
+    lager:info("Set called on: ~p for: ~p", [Filter, Key]),
     ok.
 
 %% @doc Sets multiple keys in a filter
-bulk(_Filter, _Keys) ->
+bulk(Filter, Keys) ->
+    lager:info("Bulk called on: ~p for: ~p", [Filter, Keys]),
     ok.
 
 %% @doc Gets information about a filter
-info(_Filter, _Absolute) ->
+info(Filter, Absolute) ->
+    lager:info("Info called on: ~p with absolute: ~p", [Filter, Absolute]),
     ok.
 
 %% @doc Flushes either a given filter, or all filters.
-flush(_Filter) ->
+flush(Filter) ->
+    lager:info("Flush called on: ~p", [Filter]),
     ok.
 
