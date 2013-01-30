@@ -145,8 +145,12 @@ process_cmd(State, <<"clear ", Rest/binary>>) ->
 process_cmd(State=#state{socket=Sock}, <<"create ", _Rest/binary>>) ->
     State;
 
-process_cmd(State=#state{socket=Sock}, <<"list">>) ->
-    State;
+process_cmd(State, <<"list", Rest/binary>>) ->
+    no_args_needed(fun() ->
+        _Result = bloomd:list(),
+        % TODO: Handle Response
+        State
+    end, Rest, State);
 
 % Handle the filter vs no-filter case
 process_cmd(State=#state{socket=Sock}, <<"flush ", _Rest/binary>>) ->
@@ -263,6 +267,19 @@ filter_needed(Func, Remain, State) ->
             gen_tcp:send(State#state.socket,
                          [?CLIENT_ERR, ?FILT_NEEDED, ?NEWLINE]);
 
+        _ ->
+            gen_tcp:send(State#state.socket,
+                         [?CLIENT_ERR, ?UNEXPECTED_ARGS, ?NEWLINE]),
+            State
+    end.
+
+
+% This helper ensures a command is called with no further arguments.
+% It then invokes a callback of arity 0, or provides the appropriate
+% error tot he user.
+no_args_needed(Func, Remain, State) ->
+    case Remain of
+        <<>> -> Func();
         _ ->
             gen_tcp:send(State#state.socket,
                          [?CLIENT_ERR, ?UNEXPECTED_ARGS, ?NEWLINE]),
