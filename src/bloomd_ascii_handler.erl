@@ -178,6 +178,30 @@ process_cmd(State, <<"clear ", Rest/binary>>) ->
     end, Rest, State);
 
 process_cmd(State, <<"create ", Rest/binary>>) ->
+    case binary:split(Rest, [<<" ">>], [global]) of
+        [Filter | Options] when Filter =/= <<>> ->
+            case valid_filter(Filter) of
+                true ->
+                    case parse_create_options(Options) of
+                        {error, badargs} ->
+                            gen_tcp:send(State#state.socket,
+                                 [?CLIENT_ERR, ?BAD_ARGS, ?NEWLINE]);
+
+                        Opts ->
+                            _Result = bloom:create(Filter, Opts)
+                            % TODO: Handle response
+                    end;
+
+                _ ->
+                    gen_tcp:send(State#state.socket,
+                                 [?CLIENT_ERR, ?BAD_FILT_NAME, ?NEWLINE])
+            end;
+
+        % Handle the no filter case
+        [_] ->
+            gen_tcp:send(State#state.socket,
+                         [?CLIENT_ERR, ?FILT_NEEDED, ?NEWLINE])
+    end,
     State;
 
 process_cmd(State, <<"list", Rest/binary>>) ->
@@ -345,6 +369,49 @@ valid_filter(Filter) ->
         {match, _} -> true;
         _ -> false
     end.
+
+
+% Parses the options list for the connect command
+% into a proplist.
+-spec parse_create_options([binary()]) -> {error, badargs} | [{atom(), term()}].
+parse_create_options(Options) ->
+    parse_create_options(Options, []).
+
+% Tail recursive helper
+parse_create_options([], Props) -> Props;
+parse_create_options([Opt | Remain], Props) ->
+    % Split on the equals sign
+    case binary:split(Opt, [<<"=">>]) of
+        % Should be name=val
+        [Name, Raw] ->
+            KeyRaw = list_to_atom(binary_to_list(Name)),
+
+            % Re-write the key if necessary
+            Key = case KeyRaw of
+                prob -> probability;
+                K -> K
+            end,
+
+            % Convert based on the name
+            Val = case Key of
+                capacity    -> to_integer(Raw);
+                probability -> to_float(Raw);
+                in_memory   -> to_integer(Raw);
+                _           -> error
+            end,
+
+            % Validate the conversion
+            case Val of
+                error -> {error, badargs};
+
+                % Recursively handle the other options
+                _ -> parse_create_options(Remain, [{Key, Val} | Props])
+            end;
+
+        % Bad arg
+        _ -> {error, badargs}
+    end.
+
 
 % Sends a list oriented response as
 % START
