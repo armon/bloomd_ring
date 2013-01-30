@@ -15,12 +15,13 @@ ping() ->
     riak_core_vnode_master:sync_spawn_command(IndexNode, ping, bloomd_vnode_master).
 
 %% @doc Creates a new filter with the given name and options list
-create(_Filter, _OptionsList) ->
+create(Filter, OptionsList) ->
+    lager:info("Create called on: ~p with: ~p", [Filter, OptionsList]),
     ok.
 
 %% @doc Lists all the existing filters using a covering set query
 list() ->
-    lager:info("Info called"),
+    lager:info("List called"),
     {ok, []}.
 
 %% @doc Drops a filter
