@@ -331,7 +331,8 @@ filter_needed(Func, Remain, State) ->
 
         [Blank] when Blank =:= <<>> ->
             gen_tcp:send(State#state.socket,
-                         [?CLIENT_ERR, ?FILT_NEEDED, ?NEWLINE]);
+                         [?CLIENT_ERR, ?FILT_NEEDED, ?NEWLINE]),
+            State;
 
         _ ->
             gen_tcp:send(State#state.socket,
