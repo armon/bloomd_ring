@@ -226,8 +226,35 @@ process_cmd(State, <<"flush", Rest/binary>>) ->
     end, Rest, State);
 
 % Catch all for an undefined command
-process_cmd(State=#state{socket=Sock}, _) ->
-    gen_tcp:send(Sock, [?CLIENT_ERR, ?CMD_NOT_SUP, ?NEWLINE]), State.
+process_cmd(State=#state{socket=Sock}, Cmd) ->
+    % Check if this is a command that takes an argument, and is simply missing
+    % any arguments
+    Requires = case Cmd of
+        <<"c">>      -> filter_key;
+        <<"check">>  -> filter_key;
+        <<"m">>      -> filter_key;
+        <<"multi">>  -> filter_key;
+        <<"s">>      -> filter_key;
+        <<"set">>    -> filter_key;
+        <<"b">>      -> filter_key;
+        <<"bulk">>   -> filter_key;
+        <<"info">>   -> filter;
+        <<"drop">>   -> filter;
+        <<"close">>  -> filter;
+        <<"clear">>  -> filter;
+        <<"create">> -> filter;
+        _            -> unknown
+    end,
+
+    % Get the appropriate message
+    Msg = case Requires of
+        filter_key -> ?FILT_KEY_NEEDED;
+        filter -> ?FILT_NEEDED;
+        unknown -> ?CMD_NOT_SUP
+    end,
+
+    % Send and return
+    gen_tcp:send(Sock, [?CLIENT_ERR, Msg, ?NEWLINE]), State.
 
 %%%
 % Shared command processors, for re-use if a command
@@ -303,7 +330,7 @@ filter_keys_needed(Func, Remain, State, SingleKey) ->
             end;
 
         % Ensure we have a filter and at least one key
-        [_] ->
+        _ ->
             gen_tcp:send(State#state.socket,
                          [?CLIENT_ERR, ?FILT_KEY_NEEDED, ?NEWLINE]),
             State
