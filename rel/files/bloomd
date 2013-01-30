@@ -122,7 +122,7 @@ case "$1" in
         # .boot file typically just $SCRIPT (ie, the app name)
         # however, for debugging, sometimes start_clean.boot is useful:
         case "$1" in
-            console)        BOOTFILE=$SCRIPT ;;
+            console)        BOOTFILE="bloomd_ring" ;;
             console_clean)  BOOTFILE=start_clean ;;
         esac
         # Setup beam-required vars
