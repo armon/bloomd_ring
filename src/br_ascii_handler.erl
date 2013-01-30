@@ -419,10 +419,10 @@ parse_create_options([Opt | Remain], Props) ->
 % N2
 % ..
 % END
-send_list(Sock, List) ->
-    % Terminate each line
-    Terminated = [[Line, ?NEWLINE] || Line <- List],
-    gen_tcp:send(Sock, [?START, Terminated, ?END]).
+%send_list(Sock, List) ->
+%    % Terminate each line
+%    Terminated = [[Line, ?NEWLINE] || Line <- List],
+%    gen_tcp:send(Sock, [?START, Terminated, ?END]).
 
 
 -spec to_float(binary()) -> error | float().
@@ -445,15 +445,15 @@ to_integer(Bin) ->
 
 
 % Gives a nice base 10 representation of a float
-format_float(Val) ->
-    % Get the whole number part
-    WholePart = trunc(Val),
+%format_float(Val) ->
+%    % Get the whole number part
+%    WholePart = trunc(Val),
 
-    % Get the sub part
-    SubPart = abs(trunc(Val * 10000)) rem 10000,
+%    % Get the sub part
+%    SubPart = abs(trunc(Val * 10000)) rem 10000,
 
-    % Convert to iolist
-    [integer_to_list(WholePart), ".", integer_to_list(SubPart)].
+%    % Convert to iolist
+%    [integer_to_list(WholePart), ".", integer_to_list(SubPart)].
 
 
 
@@ -470,8 +470,8 @@ to_int_test() ->
     ?assertEqual(1, to_integer(<<"1">>)),
     ?assertEqual(-1, to_integer(<<"-1">>)).
 
-format_float_test() ->
-    ?assertEqual(["-123", ".", "1234"], format_float(-123.123456)),
-    ?assertEqual(["123", ".", "1234"], format_float(123.123456)).
+%format_float_test() ->
+%    ?assertEqual(["-123", ".", "1234"], format_float(-123.123456)),
+%    ?assertEqual(["123", ".", "1234"], format_float(123.123456)).
 
 -endif.
