@@ -118,7 +118,42 @@ process_cmd(State, <<"b ", Rest/binary>>) ->
 process_cmd(State, <<"bulk ", Rest/binary>>) ->
     process_bulk(State, Rest);
 
-process_cmd(State, <<"info ", _Rest/binary>>) ->
+process_cmd(State, <<"info ", Rest/binary>>) ->
+    case binary:split(Rest, [<<" ">>], [global]) of
+        % Handle the +absolute extension case
+        [Filter, Modifier] when Modifier =:= <<"+absolute">> ->
+            case valid_filter(Filter) of
+                true ->
+                    _Result = bloom:info(Filter, true);
+                    % TODO: Handle response
+
+                _ ->
+                    gen_tcp:send(State#state.socket,
+                                 [?CLIENT_ERR, ?BAD_FILT_NAME, ?NEWLINE])
+            end;
+
+        % Handle standard info case
+        [Filter] when Filter =/= <<>> ->
+            case valid_filter(Filter) of
+                true ->
+                    _Result = bloom:info(Filter, false);
+                    % TODO: Handle response
+
+                _ ->
+                    gen_tcp:send(State#state.socket,
+                                 [?CLIENT_ERR, ?BAD_FILT_NAME, ?NEWLINE])
+            end;
+
+        % Handle the no filter case
+        [_] ->
+            gen_tcp:send(State#state.socket,
+                         [?CLIENT_ERR, ?FILT_NEEDED, ?NEWLINE]);
+
+        % Handle the too many args case
+        _ ->
+            gen_tcp:send(State#state.socket,
+                         [?CLIENT_ERR, ?UNEXPECTED_ARGS, ?NEWLINE])
+    end,
     State;
 
 process_cmd(State, <<"drop ", Rest/binary>>) ->
@@ -142,7 +177,7 @@ process_cmd(State, <<"clear ", Rest/binary>>) ->
         State
     end, Rest, State);
 
-process_cmd(State=#state{socket=Sock}, <<"create ", _Rest/binary>>) ->
+process_cmd(State, <<"create ", Rest/binary>>) ->
     State;
 
 process_cmd(State, <<"list", Rest/binary>>) ->
@@ -153,13 +188,13 @@ process_cmd(State, <<"list", Rest/binary>>) ->
     end, Rest, State);
 
 % Handle the filter vs no-filter case
-process_cmd(State=#state{socket=Sock}, <<"flush ", Rest/binary>>) ->
+process_cmd(State, <<"flush ", Rest/binary>>) ->
     filter_needed(fun(Filter) ->
         _Result = bloomd:flush(Filter),
         % TODO: Handle response
         State
     end, Rest, State);
-process_cmd(State=#state{socket=Sock}, <<"flush", Rest/binary>>) ->
+process_cmd(State, <<"flush", Rest/binary>>) ->
     no_args_needed(fun() ->
         _Result = bloomd:flush(undefined),
         % TODO: Handle Response
