@@ -86,12 +86,12 @@ run()
 case "$1" in
     join)
         shift
-        run bloomd_console join $@
+        run bloomd_ring_console join $@
         ;;
 
     leave)
         shift
-        run bloomd_console leave $@
+        run bloomd_ring_console leave $@
         ;;
 
     remove)
@@ -101,7 +101,7 @@ case "$1" in
         fi
 
         shift
-        run bloomd_console remove $@
+        run bloomd_ring_console remove $@
         ;;
 
     member_status)
@@ -160,7 +160,7 @@ case "$1" in
 
     ringready)
         shift
-        run bloomd_console ringready $@
+        run bloomd_ring_console ringready $@
         ;;
 
     *)
