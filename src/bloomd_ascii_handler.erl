@@ -153,11 +153,18 @@ process_cmd(State, <<"list", Rest/binary>>) ->
     end, Rest, State);
 
 % Handle the filter vs no-filter case
-process_cmd(State=#state{socket=Sock}, <<"flush ", _Rest/binary>>) ->
-    State;
-process_cmd(State=#state{socket=Sock}, <<"flush">>) ->
-    State;
-
+process_cmd(State=#state{socket=Sock}, <<"flush ", Rest/binary>>) ->
+    filter_needed(fun(Filter) ->
+        _Result = bloomd:flush(Filter),
+        % TODO: Handle response
+        State
+    end, Rest, State);
+process_cmd(State=#state{socket=Sock}, <<"flush", Rest/binary>>) ->
+    no_args_needed(fun() ->
+        _Result = bloomd:flush(undefined),
+        % TODO: Handle Response
+        State
+    end, Rest, State);
 
 % Catch all for an undefined command
 process_cmd(State=#state{socket=Sock}, _) ->
