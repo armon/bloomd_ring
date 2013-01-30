@@ -119,7 +119,7 @@ process_cmd(State, <<"bulk ", Rest/binary>>) ->
     process_bulk(State, Rest);
 
 process_cmd(State, <<"info ", Rest/binary>>) ->
-    case binary:split(Rest, [<<" ">>], [global]) of
+    case split(Rest, ?SPACE, true) of
         % Handle the +absolute extension case
         [Filter, Modifier] when Modifier =:= <<"+absolute">> ->
             case valid_filter(Filter) of
@@ -178,7 +178,7 @@ process_cmd(State, <<"clear ", Rest/binary>>) ->
     end, Rest, State);
 
 process_cmd(State, <<"create ", Rest/binary>>) ->
-    case binary:split(Rest, [<<" ">>], [global]) of
+    case split(Rest, ?SPACE, true) of
         [Filter | Options] when Filter =/= <<>> ->
             case valid_filter(Filter) of
                 true ->
@@ -280,7 +280,7 @@ filter_keys_needed(Func, Remain, State) ->
     filter_keys_needed(Func, Remain, State, false).
 
 filter_keys_needed(Func, Remain, State, SingleKey) ->
-    case binary:split(Remain, [<<" ">>], [global]) of
+    case split(Remain, ?SPACE, true) of
         [Filter, Key | Keys] ->
             % Validate the filter
             case valid_filter(Filter) of
@@ -315,7 +315,7 @@ filter_keys_needed(Func, Remain, State, SingleKey) ->
 % if necessary, otherwise a callback function of arity 1
 % is invoked with the filter.
 filter_needed(Func, Remain, State) ->
-    case binary:split(Remain, [<<" ">>], [global]) of
+    case split(Remain, ?SPACE, true) of
         % Ensure we have a filter only
         [Filter] when Filter =/= <<>> ->
             % Validate the filter
@@ -382,7 +382,7 @@ parse_create_options(Options) ->
 parse_create_options([], Props) -> Props;
 parse_create_options([Opt | Remain], Props) ->
     % Split on the equals sign
-    case binary:split(Opt, [<<"=">>]) of
+    case split(Opt, <<"=">>, false) of
         % Should be name=val
         [Name, Raw] ->
             KeyRaw = list_to_atom(binary_to_list(Name)),
@@ -412,6 +412,21 @@ parse_create_options([Opt | Remain], Props) ->
         % Bad arg
         _ -> {error, badargs}
     end.
+
+
+% Does a split that filters out empty binaries
+split(Bin, Patterns, Global) ->
+    % Get the options
+    Opts = case Global of
+        true -> [global];
+        _ -> []
+    end,
+
+    % Do the split
+    Res = binary:split(Bin, Patterns, Opts),
+
+    % Filter
+    [B || B <- Res, B =/= <<>>].
 
 
 % Sends a list oriented response as
