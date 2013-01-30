@@ -118,17 +118,29 @@ process_cmd(State, <<"b ", Rest/binary>>) ->
 process_cmd(State, <<"bulk ", Rest/binary>>) ->
     process_bulk(State, Rest);
 
-process_cmd(State=#state{socket=Sock}, <<"info ", _Rest/binary>>) ->
+process_cmd(State, <<"info ", _Rest/binary>>) ->
     State;
 
-process_cmd(State=#state{socket=Sock}, <<"drop ", _Rest/binary>>) ->
-    State;
+process_cmd(State, <<"drop ", Rest/binary>>) ->
+    filter_needed(fun(Filter) ->
+        _Result = bloomd:drop(Filter),
+        % TODO: Handle response
+        State
+    end, Rest, State);
 
-process_cmd(State=#state{socket=Sock}, <<"close ", _Rest/binary>>) ->
-    State;
+process_cmd(State, <<"close ", Rest/binary>>) ->
+    filter_needed(fun(Filter) ->
+        _Result = bloomd:close(Filter),
+        % TODO: Handle response
+        State
+    end, Rest, State);
 
-process_cmd(State=#state{socket=Sock}, <<"clear ", _Rest/binary>>) ->
-    State;
+process_cmd(State, <<"clear ", Rest/binary>>) ->
+    filter_needed(fun(Filter) ->
+        _Result = bloomd:clear(Filter),
+        % TODO: Handle response
+        State
+    end, Rest, State);
 
 process_cmd(State=#state{socket=Sock}, <<"create ", _Rest/binary>>) ->
     State;
@@ -199,22 +211,18 @@ filter_keys_needed(Func, Remain, State) ->
 
 filter_keys_needed(Func, Remain, State, SingleKey) ->
     case binary:split(Remain, [<<" ">>], [global]) of
-        % Ensure we have a filter and at least one key
-        [_] ->
-            gen_tcp:send(State#state.socket, [?CLIENT_ERR, ?FILT_KEY_NEEDED, ?NEWLINE]), State;
-
-        [Filter | Keys] ->
+        [Filter, Key | Keys] ->
             % Validate the filter
             case valid_filter(Filter) of
                 true ->
                     % Handle the case of single key required
                     case Keys of
-                        [_First, _Second | _Tail] when SingleKey ->
+                        [_First | _Tail] when SingleKey ->
                             gen_tcp:send(State#state.socket,
                                  [?CLIENT_ERR, ?UNEXPECTED_ARGS, ?NEWLINE]),
                             State;
 
-                        _ -> Func(Filter, Keys)
+                        _ -> Func(Filter, [Key | Keys])
                     end;
 
                 % Handle bad filter names
@@ -222,7 +230,43 @@ filter_keys_needed(Func, Remain, State, SingleKey) ->
                     gen_tcp:send(State#state.socket,
                                  [?CLIENT_ERR, ?BAD_FILT_NAME, ?NEWLINE]),
                     State
-            end
+            end;
+
+        % Ensure we have a filter and at least one key
+        [_] ->
+            gen_tcp:send(State#state.socket,
+                         [?CLIENT_ERR, ?FILT_KEY_NEEDED, ?NEWLINE]),
+            State
+    end.
+
+
+% This helper ensures that a filter is provided, and
+% has a valid name. The appropriate error codes are returned
+% if necessary, otherwise a callback function of arity 1
+% is invoked with the filter.
+filter_needed(Func, Remain, State) ->
+    case binary:split(Remain, [<<" ">>], [global]) of
+        % Ensure we have a filter only
+        [Filter] when Filter =/= <<>> ->
+            % Validate the filter
+            case valid_filter(Filter) of
+                true -> Func(Filter);
+
+                % Handle bad filter names
+                _ ->
+                    gen_tcp:send(State#state.socket,
+                                 [?CLIENT_ERR, ?BAD_FILT_NAME, ?NEWLINE]),
+                    State
+            end;
+
+        [Blank] when Blank =:= <<>> ->
+            gen_tcp:send(State#state.socket,
+                         [?CLIENT_ERR, ?FILT_NEEDED, ?NEWLINE]);
+
+        _ ->
+            gen_tcp:send(State#state.socket,
+                         [?CLIENT_ERR, ?UNEXPECTED_ARGS, ?NEWLINE]),
+            State
     end.
 
 
