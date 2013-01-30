@@ -133,7 +133,7 @@ process_cmd(State, <<"info ", Rest/binary>>) ->
             end;
 
         % Handle standard info case
-        [Filter] when Filter =/= <<>> ->
+        [Filter] ->
             case valid_filter(Filter) of
                 true ->
                     _Result = bloomd_ring:info(Filter, false);
@@ -145,7 +145,7 @@ process_cmd(State, <<"info ", Rest/binary>>) ->
             end;
 
         % Handle the no filter case
-        [_] ->
+        [] ->
             gen_tcp:send(State#state.socket,
                          [?CLIENT_ERR, ?FILT_NEEDED, ?NEWLINE]);
 
@@ -179,7 +179,7 @@ process_cmd(State, <<"clear ", Rest/binary>>) ->
 
 process_cmd(State, <<"create ", Rest/binary>>) ->
     case split(Rest, ?SPACE, true) of
-        [Filter | Options] when Filter =/= <<>> ->
+        [Filter | Options] ->
             case valid_filter(Filter) of
                 true ->
                     case parse_create_options(Options) of
@@ -198,7 +198,7 @@ process_cmd(State, <<"create ", Rest/binary>>) ->
             end;
 
         % Handle the no filter case
-        [_] ->
+        [] ->
             gen_tcp:send(State#state.socket,
                          [?CLIENT_ERR, ?FILT_NEEDED, ?NEWLINE])
     end,
@@ -317,7 +317,7 @@ filter_keys_needed(Func, Remain, State, SingleKey) ->
 filter_needed(Func, Remain, State) ->
     case split(Remain, ?SPACE, true) of
         % Ensure we have a filter only
-        [Filter] when Filter =/= <<>> ->
+        [Filter] ->
             % Validate the filter
             case valid_filter(Filter) of
                 true -> Func(Filter);
@@ -329,7 +329,7 @@ filter_needed(Func, Remain, State) ->
                     State
             end;
 
-        [Blank] when Blank =:= <<>> ->
+        [] ->
             gen_tcp:send(State#state.socket,
                          [?CLIENT_ERR, ?FILT_NEEDED, ?NEWLINE]),
             State;
