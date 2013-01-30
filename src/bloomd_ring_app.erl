@@ -1,4 +1,4 @@
--module(bloomd_app).
+-module(bloomd_ring_app).
 
 -behaviour(application).
 
@@ -10,15 +10,15 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    case bloomd_sup:start_link() of
+    case bloomd_ring_sup:start_link() of
         {ok, Pid} ->
-            ok = riak_core:register([{vnode_module, bloomd_vnode}]),
-            
-            ok = riak_core_ring_events:add_guarded_handler(bloomd_ring_event_handler, []),
-            ok = riak_core_node_watcher_events:add_guarded_handler(bloomd_node_event_handler, []),
+            ok = riak_core:register([{vnode_module, br_vnode}]),
+
+            ok = riak_core_ring_events:add_guarded_handler(br_event_handler, []),
+            ok = riak_core_node_watcher_events:add_guarded_handler(br_node_event_handler, []),
             ok = riak_core_node_watcher:service_up(bloomd, self()),
 
-            EntryRoute = {["bloomd", "ping"], bloomd_wm_ping, []},
+            EntryRoute = {["bloomd", "ping"], br_wm_ping, []},
             webmachine_router:add_route(EntryRoute),
 
             {ok, Pid};

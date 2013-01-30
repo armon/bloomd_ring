@@ -14,7 +14,7 @@
 
 %% Copyright (c) 2007-2011 Basho Technologies, Inc.  All Rights Reserved.
 
--module(bloomd_ring_event_handler).
+-module(br_event_handler).
 -behaviour(gen_event).
 
 %% gen_event callbacks

@@ -1,4 +1,4 @@
--module(bloomd_ascii_handler).
+-module(br_ascii_handler).
 -behavior(gen_server).
 -export([start_link/1, init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
@@ -124,7 +124,7 @@ process_cmd(State, <<"info ", Rest/binary>>) ->
         [Filter, Modifier] when Modifier =:= <<"+absolute">> ->
             case valid_filter(Filter) of
                 true ->
-                    _Result = bloom:info(Filter, true);
+                    _Result = bloomd_ring:info(Filter, true);
                     % TODO: Handle response
 
                 _ ->
@@ -136,7 +136,7 @@ process_cmd(State, <<"info ", Rest/binary>>) ->
         [Filter] when Filter =/= <<>> ->
             case valid_filter(Filter) of
                 true ->
-                    _Result = bloom:info(Filter, false);
+                    _Result = bloomd_ring:info(Filter, false);
                     % TODO: Handle response
 
                 _ ->
@@ -158,21 +158,21 @@ process_cmd(State, <<"info ", Rest/binary>>) ->
 
 process_cmd(State, <<"drop ", Rest/binary>>) ->
     filter_needed(fun(Filter) ->
-        _Result = bloomd:drop(Filter),
+        _Result = bloomd_ring:drop(Filter),
         % TODO: Handle response
         State
     end, Rest, State);
 
 process_cmd(State, <<"close ", Rest/binary>>) ->
     filter_needed(fun(Filter) ->
-        _Result = bloomd:close(Filter),
+        _Result = bloomd_ring:close(Filter),
         % TODO: Handle response
         State
     end, Rest, State);
 
 process_cmd(State, <<"clear ", Rest/binary>>) ->
     filter_needed(fun(Filter) ->
-        _Result = bloomd:clear(Filter),
+        _Result = bloomd_ring:clear(Filter),
         % TODO: Handle response
         State
     end, Rest, State);
@@ -188,7 +188,7 @@ process_cmd(State, <<"create ", Rest/binary>>) ->
                                  [?CLIENT_ERR, ?BAD_ARGS, ?NEWLINE]);
 
                         Opts ->
-                            _Result = bloom:create(Filter, Opts)
+                            _Result = bloomd_ring:create(Filter, Opts)
                             % TODO: Handle response
                     end;
 
@@ -206,7 +206,7 @@ process_cmd(State, <<"create ", Rest/binary>>) ->
 
 process_cmd(State, <<"list", Rest/binary>>) ->
     no_args_needed(fun() ->
-        _Result = bloomd:list(),
+        _Result = bloomd_ring:list(),
         % TODO: Handle Response
         State
     end, Rest, State);
@@ -214,13 +214,13 @@ process_cmd(State, <<"list", Rest/binary>>) ->
 % Handle the filter vs no-filter case
 process_cmd(State, <<"flush ", Rest/binary>>) ->
     filter_needed(fun(Filter) ->
-        _Result = bloomd:flush(Filter),
+        _Result = bloomd_ring:flush(Filter),
         % TODO: Handle response
         State
     end, Rest, State);
 process_cmd(State, <<"flush", Rest/binary>>) ->
     no_args_needed(fun() ->
-        _Result = bloomd:flush(undefined),
+        _Result = bloomd_ring:flush(undefined),
         % TODO: Handle Response
         State
     end, Rest, State);
@@ -236,7 +236,7 @@ process_cmd(State=#state{socket=Sock}, _) ->
 
 process_check(State, Rest) ->
     filter_key_needed(fun(Filter, [Key]) ->
-        _Result = bloomd:check(Filter, Key),
+        _Result = bloomd_ring:check(Filter, Key),
         % TODO: handle response
         State
     end, Rest, State).
@@ -244,7 +244,7 @@ process_check(State, Rest) ->
 
 process_multi(State, Rest) ->
     filter_keys_needed(fun(Filter, Keys) ->
-        _Result = bloomd:multi(Filter, Keys),
+        _Result = bloomd_ring:multi(Filter, Keys),
         % TODO: handle response
         State
     end, Rest, State).
@@ -252,7 +252,7 @@ process_multi(State, Rest) ->
 
 process_set(State, Rest) ->
     filter_key_needed(fun(Filter, [Key]) ->
-        _Result = bloomd:set(Filter, Key),
+        _Result = bloomd_ring:set(Filter, Key),
         % TODO: handle response
         State
     end, Rest, State).
@@ -260,7 +260,7 @@ process_set(State, Rest) ->
 
 process_bulk(State, Rest) ->
     filter_keys_needed(fun(Filter, Keys) ->
-        _Result = bloomd:bulk(Filter, Keys),
+        _Result = bloomd_ring:bulk(Filter, Keys),
         % TODO: handle response
         State
     end, Rest, State).

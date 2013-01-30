@@ -1,4 +1,4 @@
--module(bloomd_sup).
+-module(bloomd_ring_sup).
 
 -behaviour(supervisor).
 
@@ -26,17 +26,17 @@ init(_Args) ->
 
     % Connection Manager
     ConnManager = {conn_manager,
-           {bloomd_conn_manager_sup, start_link, []},
+           {br_conn_manager_sup, start_link, []},
            permanent, 60000, supervisor, dynamic},
 
     % Accept Manager, needs port and pool size
     AcceptManager  = {acceptors,
-           {bloomd_acceptor_sup, start_link, [Port, AcceptPool]},
+           {br_acceptor_sup, start_link, [Port, AcceptPool]},
            permanent, 60000, supervisor, dynamic},
 
 
     VMaster = { bloomd_vnode_master,
-                  {riak_core_vnode_master, start_link, [bloomd_vnode]},
+                  {riak_core_vnode_master, start_link, [br_vnode]},
                   permanent, 5000, worker, [riak_core_vnode_master]},
 
     { ok,

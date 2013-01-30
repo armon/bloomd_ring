@@ -1,5 +1,5 @@
 %% -*- erlang -*-
-{application, bloomd,
+{application, bloomd_ring,
  [
   {description, ""},
   {vsn, "1"},
@@ -9,7 +9,7 @@
                   stdlib,
                   riak_core
                  ]},
-  {mod, { bloomd_app, []}},
+  {mod, { bloomd_ring_app, []}},
   {env, [
     {bloomd_ascii_port, 8683},
     {bloomd_accept_pool, 8}

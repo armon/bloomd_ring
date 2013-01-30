@@ -1,5 +1,5 @@
--module(bloomd).
--include("bloomd.hrl").
+-module(bloomd_ring).
+-include("bloomd_ring.hrl").
 -include_lib("riak_core/include/riak_core_vnode.hrl").
 
 -export([ping/0, create/2, list/0, drop/1, close/1, clear/1,

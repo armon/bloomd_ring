@@ -1,4 +1,4 @@
--module(bloomd_acceptor_sup).
+-module(br_acceptor_sup).
 -behaviour(supervisor).
 -export([start_link/2, init/1]).
 
@@ -18,7 +18,7 @@ init([Port, PoolSize]) ->
 
 pool(_, 0, Workers) -> Workers;
 pool(Listen, PoolSize, Workers) ->
-    Spec = {{acceptor, PoolSize}, {bloomd_acceptor, start_link, [Listen]},
+    Spec = {{acceptor, PoolSize}, {br_acceptor, start_link, [Listen]},
             permanent, 5000, worker, dynamic},
     pool(Listen, PoolSize - 1, [Spec | Workers]).
 

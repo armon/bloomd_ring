@@ -1,6 +1,6 @@
--module(bloomd_vnode).
+-module(br_vnode).
 -behaviour(riak_core_vnode).
--include("bloomd.hrl").
+-include("bloomd_ring.hrl").
 
 -export([start_vnode/1,
          init/1,

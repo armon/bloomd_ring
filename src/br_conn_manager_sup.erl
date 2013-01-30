@@ -1,4 +1,4 @@
--module(bloomd_conn_manager_sup).
+-module(br_conn_manager_sup).
 -behaviour(supervisor).
 -export([start_link/0, init/1]).
 

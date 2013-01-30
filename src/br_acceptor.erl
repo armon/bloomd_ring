@@ -1,4 +1,4 @@
--module(bloomd_acceptor).
+-module(br_acceptor).
 -export([start_link/1, init/2]).
 
 % Creates a new process to start the ETL process
@@ -28,7 +28,7 @@ accept_loop(Listen) ->
 % Starts a new handler for a client
 spawn_handler(Socket) ->
     % Create the handler
-    {ok, HandlerPid} = bloomd_conn_manager:start_handler(Socket),
+    {ok, HandlerPid} = br_conn_manager:start_handler(Socket),
 
     % Hand over control of the socket
     ok = gen_tcp:controlling_process(Socket, HandlerPid),

@@ -1,5 +1,5 @@
 %% @doc Interface for riak_searchng-admin commands.
--module(bloomd_console).
+-module(bloomd_ring_console).
 -export([join/1,
          leave/1,
          remove/1,
