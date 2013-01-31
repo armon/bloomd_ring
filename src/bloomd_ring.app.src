@@ -12,6 +12,8 @@
   {mod, { bloomd_ring_app, []}},
   {env, [
     {bloomd_ascii_port, 8683},
-    {bloomd_accept_pool, 8}
+    {bloomd_accept_pool, 8},
+    {bloomd_local_host, "127.0.0.1"},
+    {bloomd_local_port, 8673}
   ]}
  ]}.
