@@ -211,3 +211,21 @@ memory used.
 This allows S to continue to service reads, and D is able to take over the vnode without
 any writes being dropped.
 
+
+Key Hashing
+============
+
+A very important aspect of Dynamo systems is hashing the data in a manner
+that leads to a good distribution of data across the system. In the case of
+bloomd ring, most commands are oriented around filters and keys.
+
+Each filter is decompossed into K sub-filters or slices, which represent
+parts of the key space.
+
+To determine which v-node owns a particular filter/key, we do the following:
+
+    Slice = Hash(Key) % K
+    FilterSlice = "Filter:Slice"
+    V-Node = Hash(FilterSlice)
+
+
