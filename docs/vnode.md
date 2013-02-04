@@ -41,13 +41,13 @@ provided to the co-ordinator (probability, storage, capacity, size).
 The result format is:
 
     {ok, [
-    {FilterName, [{Slice, Probability, Storage, Capacity, Size}]}
+    {FilterName, [{Slice, Info}]}
     ]}
 
 Alternatively, {error, command_failed}.
 
 The response should be one of:
-* {ok, [{FilterName, [{Slice, Probability, Storage, Capacity, Size}]}]}
+* {ok, [{FilterName, [{Slice, SliceInfo}]}]}
 * {error, command_failed}
 
 drop
