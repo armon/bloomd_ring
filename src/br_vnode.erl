@@ -44,9 +44,60 @@ init([Partition]) ->
     {ok, #state {partition=Partition, conn=Conn}}.
 
 
-%% Sample command: respond to a ping
-handle_command(ping, _Sender, State) ->
-    {reply, {pong, State#state.partition}, State};
+%%
+% Handles the check key command. This can be sent down to bloomd
+% directly, since we know exactly which slice handles it.
+%%%
+handle_command({check_filter, FilterName, Slice, Key}, Sender, State) ->
+    % Convert into the proper names
+    Name = filter_slice_name(FilterName, Slice),
+
+    % Make use of pipelining instead of blocking the v-node
+    spawn(fun() ->
+        % Query bloomd
+        F = bloomd:filter(State#state.conn, Name),
+        Res = bloomd:check(F, Key),
+
+        % Get the response
+        Resp = case Res of
+            {ok, [V]} -> {ok, V};
+            {error, E} -> {error, E}
+        end,
+
+        % Respond
+        riak_core_vnode:reply(Sender, Resp)
+    end),
+
+    % Do not respond, other process will do it
+    {noreply, State};
+
+
+%%%
+% Handles the set key command. This can be sent down to bloomd
+% directly, since we know exactly which slice handles it.
+%%%
+handle_command({set_filter, FilterName, Slice, Key}, Sender, State) ->
+    % Convert into the proper names
+    Name = filter_slice_name(FilterName, Slice),
+
+    % Make use of pipelining instead of blocking the v-node
+    spawn(fun() ->
+        % Query bloomd
+        F = bloomd:filter(State#state.conn, Name),
+        Res = bloomd:set(F, Key),
+
+        % Get the response
+        Resp = case Res of
+            {ok, [V]} -> {ok, V};
+            {error, E} -> {error, E}
+        end,
+
+        % Respond
+        riak_core_vnode:reply(Sender, Resp)
+    end),
+
+    % Do not respond, other process will do it
+    {noreply, State};
 
 
 %%%
@@ -250,9 +301,14 @@ handle_command({info_filter, FilterName}, _Sender, State) ->
     {reply, Resp, State};
 
 
+%% Sample command: respond to a ping
+handle_command(ping, _Sender, State) ->
+    {reply, {pong, State#state.partition}, State};
+
 handle_command(Message, _Sender, State) ->
     ?PRINT({unhandled_command, Message}),
     {noreply, State}.
+
 
 handle_handoff_command(_Message, _Sender, State) ->
     {noreply, State}.
