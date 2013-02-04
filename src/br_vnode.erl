@@ -216,6 +216,40 @@ handle_command({flush_filter, FilterName}, _Sender, State) ->
     {reply, Resp, State};
 
 
+%%%
+% Handles the info command. This command queries
+% the local bloomd for all the slices that match the given
+% fitler name, and issues an info for all of the slices.
+%%%
+handle_command({info_filter, FilterName}, _Sender, State) ->
+    Resp = case matching_slices(FilterName, State) of
+        {error, _} -> {error, command_failed};
+        [] -> {error, no_filter};
+        Slices ->
+            % Execute all the infos in parallel
+            InfoResults = rpc:pmap({br_vnode, local_command}, [info, State], Slices),
+
+            % Check for any errors
+            case has_error(InfoResults, [command_failed, internal_error]) of
+                true -> {error, command_failed};
+                _ ->
+                    Paired = lists:zipwith(fun(Slice, Info) ->
+                        % Get the slice number
+                        {_, Num} = filter_slice_value(Slice),
+
+                        % Map the number to the info
+                        {Num, Info}
+                    end, Slices, InfoResults),
+
+                    % Return the paired info
+                    {ok, Paired}
+            end
+    end,
+
+    % Repond
+    {reply, Resp, State};
+
+
 handle_command(Message, _Sender, State) ->
     ?PRINT({unhandled_command, Message}),
     {noreply, State}.
@@ -268,6 +302,7 @@ local_command(Elem, Cmd, State) ->
         close -> bloomd:close(bloomd:filter(State#state.conn, Elem));
         clear -> bloomd:clear(bloomd:filter(State#state.conn, Elem));
         flush -> bloomd:flush(bloomd:filter(State#state.conn, Elem));
+        info -> bloomd:info(bloomd:filter(State#state.conn, Elem));
         _ -> {error, unknown_command}
     end.
 
