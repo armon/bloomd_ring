@@ -26,7 +26,10 @@
         partition,
 
         % Connection to local bloomd
-        conn
+        conn,
+
+        % Handoff state
+        handoff=false
         }).
 
 %% API
@@ -314,13 +317,13 @@ handle_handoff_command(_Message, _Sender, State) ->
     {noreply, State}.
 
 handoff_starting(_TargetNode, State) ->
-    {true, State}.
+    {true, State#state{handoff=true}}.
 
 handoff_cancelled(State) ->
-    {ok, State}.
+    {ok, State#state{handoff=false}}.
 
 handoff_finished(_TargetNode, State) ->
-    {ok, State}.
+    {ok, State#state{handoff=false}}.
 
 handle_handoff_data(_Data, State) ->
     {reply, ok, State}.
