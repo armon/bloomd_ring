@@ -39,7 +39,12 @@ init(_Args) ->
                   {riak_core_vnode_master, start_link, [br_vnode]},
                   permanent, 5000, worker, [riak_core_vnode_master]},
 
+    % FSM Managers
+    ClusterFSM = {br_cluster_fsm_sup,
+                  {br_cluster_fsm_sup, start_link, []},
+                  permanent, 60000, supervisor, dynamic},
+
     { ok,
         { {one_for_one, 5, 10},
-          [ConnManager, AcceptManager, VMaster]}}.
+          [ConnManager, AcceptManager, VMaster, ClusterFSM]}}.
 
