@@ -256,17 +256,41 @@ handle_command({clear_filter, FilterName}, _Sender, State) ->
 % fitler name, and issues a flush for all of the slices.
 %%%
 handle_command({flush_filter, FilterName}, _Sender, State) ->
-    Resp = case matching_slices(FilterName, State) of
-        {error, _} -> {error, command_failed};
-        [] -> {error, no_filter};
-        Slices ->
-            % Execute all the closes in parallel
-            CloseResults = rpc:pmap({br_vnode, local_command}, [flush, State], Slices),
+    Resp = case FilterName of
+        all ->
+            % Find all the filters
+            Results = bloomd:list(State#state.conn),
 
-            % Check for any errors
-            case has_error(CloseResults, [command_failed, internal_error]) of
+            % Check for error
+            case any_error(Results) of
                 true -> {error, command_failed};
-                _ -> done
+                _ ->
+                    % Find all the matching slices
+                    Slices = [F || {F, _I} <- Results],
+
+                    % Execute all the closes in parallel
+                    CloseResults = rpc:pmap({br_vnode, local_command}, [flush, State], Slices),
+
+                    % Check for any errors
+                    case has_error(CloseResults, [command_failed, internal_error]) of
+                        true -> {error, command_failed};
+                        _ -> done
+                    end
+            end;
+
+        _ ->
+            case matching_slices(FilterName, State) of
+                {error, _} -> {error, command_failed};
+                [] -> {error, no_filter};
+                Slices ->
+                    % Execute all the closes in parallel
+                    CloseResults = rpc:pmap({br_vnode, local_command}, [flush, State], Slices),
+
+                    % Check for any errors
+                    case has_error(CloseResults, [command_failed, internal_error]) of
+                        true -> {error, command_failed};
+                        _ -> done
+                    end
             end
     end,
 
