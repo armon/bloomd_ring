@@ -110,9 +110,13 @@ handle_command({set_filter, FilterName, Slice, Key}, Sender, State) ->
 %
 % We should respond with one of done, exists, or {error, command_failed}
 %%%
-handle_command({create_filter, FilterName, Slices, Options}, _Sender, State) ->
+handle_command({create_filter, FilterName, Options}, _Sender, State) ->
+    % Get the owned indexes for this node
+    {ok, Ring} = riak_core_ring_manager:get_my_ring(),
+    Owned = riak_core_ring:my_indices(Ring),
+
     % Convert into the proper names
-    Names = [filter_slice_name(FilterName, S) || S <- Slices],
+    Names = [filter_slice_name(FilterName, S) || S <- Owned],
 
     % Execute all the creates in parallel
     Results = rpc:pmap({br_vnode, local_command}, [{create, Options}, State], Names),

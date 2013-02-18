@@ -16,13 +16,14 @@ create
 
 A vnode is signaled to create when it receives a message like:
 
-    {create_filter, FilterName, Slices, Options}
+    {create_filter, FilterName, Options}
 
-The vnode should then create each of the slices for the given filter,
-with any possible options specified. The response should be one of:
+The vnode should then create each of the slices for the given filter
+that are owned by this node with any possible options specified.
+The response should be one of:
 * done : If any slices needed to be created
 * exists : Only if all slices already exist
-* {error, command_failed}
+* {error, command\_failed}
 
 
 list
