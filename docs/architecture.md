@@ -225,7 +225,6 @@ parts of the key space.
 To determine which v-node owns a particular filter/key, we do the following:
 
     Slice = Hash(Key) % K
-    FilterSlice = "Filter:Slice"
-    V-Node = Hash(FilterSlice)
+    V-Node = Hash({Filter, Slice})
 
 
