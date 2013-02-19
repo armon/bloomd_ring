@@ -6,6 +6,7 @@
         check/2, multi/2, set/2, bulk/2, info/2, flush/1]).
 
 -define(DEFAULT_TIMEOUT, 30000).
+-define(LONG_WAIT, 60000).
 
 %% Public API
 
@@ -43,7 +44,7 @@ create(Filter, OptionsList) ->
     {ok, ReqId} = br_cluster_fsm:start_op(create, {Filter, Opt2}),
 
     % Wait for 60 seconds for the request to complete
-    Resp = wait_for_req(ReqId, 60000),
+    Resp = wait_for_req(ReqId, ?LONG_WAIT),
     case Resp of
         {error, timeout} ->
             lager:warning("Timed out waiting for the nodes to create filter!"),
@@ -98,12 +99,61 @@ drop(Filter) ->
 %% @doc Closes a filter
 close(Filter) ->
     lager:info("Close called on: ~p", [Filter]),
-    ok.
+
+    % Start a full cluster FSM to send out the command
+    {ok, ReqId} = br_cluster_fsm:start_op(close, Filter),
+
+    % Wait default interval for the request to complete
+    Resp = wait_for_req(ReqId, ?LONG_WAIT),
+    case Resp of
+        {error, timeout} ->
+            lager:warning("Timed out waiting for the nodes to close the filter!"),
+            {error, timeout};
+
+        {ok, Results} ->
+            case lists:all(fun(R) -> R =:= {error, no_filter} end, Results) of
+                true -> {error, no_filter};
+                _ -> case lists:all(fun(R) -> R =:= done orelse R =:= {error, no_filter} end, Results) of
+                        true -> {ok, done};
+                        _ ->
+                            lager:warning("Nodes did not agree on close of ~p. Responses: ~p", [Filter, Results]),
+                            {error, internal_error}
+                    end
+            end
+    end.
+
 
 %% @doc Removes a filter from the bloomd internal manager
 clear(Filter) ->
     lager:info("Clear called on: ~p", [Filter]),
-    ok.
+
+    % Start a full cluster FSM to send out the command
+    {ok, ReqId} = br_cluster_fsm:start_op(clear, Filter),
+
+    % Wait default interval for the request to complete
+    Resp = wait_for_req(ReqId),
+    case Resp of
+        {error, timeout} ->
+            lager:warning("Timed out waiting for the nodes to clear the filter!"),
+            {error, timeout};
+
+        {ok, Results} ->
+            case lists:any(fun(R) -> R =:= {error, not_proxied} end, Results) of
+                true -> {error, not_proxied};
+                _ ->
+                    case lists:all(fun(R) -> R =:= {error, no_filter} end, Results) of
+                        true -> {error, no_filter};
+                        _ -> case lists:all(fun(R) -> R =:= done orelse R =:= {error, no_filter} end, Results) of
+                                true -> {ok, done};
+                                _ ->
+                                    lager:warning("Nodes did not agree on clear of ~p. Responses: ~p",
+                                                  [Filter, Results]),
+                                    {error, internal_error}
+                            end
+                    end
+            end
+    end.
+
 
 %% @doc Checks for a key in a filter
 check(Filter, Key) ->
