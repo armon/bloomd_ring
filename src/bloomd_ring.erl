@@ -5,6 +5,8 @@
 -export([ping/0, create/2, list/0, drop/1, close/1, clear/1,
         check/2, multi/2, set/2, bulk/2, info/2, flush/1]).
 
+-define(DEFAULT_TIMEOUT, 15000).
+
 %% Public API
 
 %% @doc Pings a random vnode to make sure communication is functional
@@ -14,10 +16,51 @@ ping() ->
     [{IndexNode, _Type}] = PrefList,
     riak_core_vnode_master:sync_spawn_command(IndexNode, ping, bloomd_vnode_master).
 
+
 %% @doc Creates a new filter with the given name and options list
 create(Filter, OptionsList) ->
     lager:info("Create called on: ~p with: ~p", [Filter, OptionsList]),
-    ok.
+
+    % If in-memory 1 is specified, we drop the option silently
+    Opt1 = case proplists:get_value(in_memory, OptionsList, 0) of
+        1 -> lists:keydelete(in_memory, 1, OptionsList);
+        _ -> OptionsList
+    end,
+
+    % If an initial capacity is provided, we silently replace it
+    % with Capacity / Partitions, since underneath the hood we
+    % are slicing the data into many partitions.
+    Opt2 = case proplists:get_value(capacity, Opt1) of
+        undefined -> Opt1;
+        Capacity ->
+            {ok, Ring} = riak_core_ring_manager:get_my_ring(),
+            Partitions = riak_core_ring:num_partitions(Ring),
+            NewCap = br_util:ceiling(Capacity / Partitions),
+            lists:keyreplace(capacity, 1, Opt1, {capacity, NewCap})
+    end,
+
+    % Start a full cluster FSM to send out the command
+    {ok, ReqId} = br_cluster_fsm:start_op(create, {Filter, Opt2}),
+
+    % Wait for 60 seconds for the request to complete
+    Resp = wait_for_req(ReqId, 60000),
+    case Resp of
+        {error, timeout} ->
+            lager:warning("Timed out waiting for the nodes to create filter!"),
+            {error, timeout};
+
+        {ok, Results} ->
+            case lists:all(fun(R) -> R =:= exists end, Results) of
+                true -> {ok, exists};
+                _ -> case lists:all(fun(R) -> R =:= done orelse R =:= exists end, Results) of
+                        true -> {ok, done};
+                        _ ->
+                            lager:warning("Nodes did not agree on create of ~p. Responses: ~p", [Filter, Results]),
+                            {error, internal_error}
+                    end
+            end
+    end.
+
 
 %% @doc Lists all the existing filters using a covering set query
 list() ->
@@ -68,4 +111,21 @@ info(Filter, Absolute) ->
 flush(Filter) ->
     lager:info("Flush called on: ~p", [Filter]),
     ok.
+
+
+%%%
+% Helper methods
+%%%
+
+
+% Waits for a specified request ID to return. Either
+% waits for the default timeout, or a user specified one.
+wait_for_req(ReqId) ->
+    wait_for_req(ReqId, ?DEFAULT_TIMEOUT).
+wait_for_req(ReqId, Timeout) ->
+    receive
+        {ReqId, Resp} -> Resp
+    after Timeout ->
+        {error, timeout}
+    end.
 
