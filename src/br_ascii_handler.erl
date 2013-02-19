@@ -178,15 +178,31 @@ process_cmd(State, <<"drop ", Rest/binary>>) ->
 
 process_cmd(State, <<"close ", Rest/binary>>) ->
     filter_needed(fun(Filter) ->
-        _Result = bloomd_ring:close(Filter),
-        % TODO: Handle response
+        Result = bloomd_ring:close(Filter),
+        case Result of
+            {ok, done} ->
+                gen_tcp:send(State#state.socket, [?DONE]);
+            {error, no_filter} ->
+                gen_tcp:send(State#state.socket, [?FILT_NOT_EXIST]);
+            {error, _} ->
+                gen_tcp:send(State#state.socket, [?INTERNAL_ERR])
+        end,
         State
     end, Rest, State);
 
 process_cmd(State, <<"clear ", Rest/binary>>) ->
     filter_needed(fun(Filter) ->
-        _Result = bloomd_ring:clear(Filter),
-        % TODO: Handle response
+        Result = bloomd_ring:clear(Filter),
+        case Result of
+            {ok, done} ->
+                gen_tcp:send(State#state.socket, [?DONE]);
+            {error, no_filter} ->
+                gen_tcp:send(State#state.socket, [?FILT_NOT_EXIST]);
+            {error, not_proxied} ->
+                gen_tcp:send(State#state.socket, [?FILT_NOT_PROXIED]);
+            {error, _} ->
+                gen_tcp:send(State#state.socket, [?INTERNAL_ERR])
+        end,
         State
     end, Rest, State);
 
