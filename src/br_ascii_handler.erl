@@ -188,8 +188,15 @@ process_cmd(State, <<"create ", Rest/binary>>) ->
                                  [?CLIENT_ERR, ?BAD_ARGS, ?NEWLINE]);
 
                         Opts ->
-                            _Result = bloomd_ring:create(Filter, Opts)
-                            % TODO: Handle response
+                            Result = bloomd_ring:create(Filter, Opts),
+                            case Result of
+                                {ok, exists} ->
+                                    gen_tcp:send(State#state.socket, [?EXISTS]);
+                                {ok, done} ->
+                                    gen_tcp:send(State#state.socket, [?DONE]);
+                                {error, _} ->
+                                    gen_tcp:send(State#state.socket, [?INTERNAL_ERR])
+                            end
                     end;
 
                 _ ->
