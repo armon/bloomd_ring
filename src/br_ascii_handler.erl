@@ -164,8 +164,15 @@ process_cmd(State, <<"info ", Rest/binary>>) ->
 
 process_cmd(State, <<"drop ", Rest/binary>>) ->
     filter_needed(fun(Filter) ->
-        _Result = bloomd_ring:drop(Filter),
-        % TODO: Handle response
+        Result = bloomd_ring:drop(Filter),
+        case Result of
+            {ok, done} ->
+                gen_tcp:send(State#state.socket, [?DONE]);
+            {error, no_filter} ->
+                gen_tcp:send(State#state.socket, [?FILT_NOT_EXIST]);
+            {error, _} ->
+                gen_tcp:send(State#state.socket, [?INTERNAL_ERR])
+        end,
         State
     end, Rest, State);
 

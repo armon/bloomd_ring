@@ -5,7 +5,7 @@
 -export([ping/0, create/2, list/0, drop/1, close/1, clear/1,
         check/2, multi/2, set/2, bulk/2, info/2, flush/1]).
 
--define(DEFAULT_TIMEOUT, 15000).
+-define(DEFAULT_TIMEOUT, 30000).
 
 %% Public API
 
@@ -67,10 +67,33 @@ list() ->
     lager:info("List called"),
     {ok, []}.
 
+
 %% @doc Drops a filter
 drop(Filter) ->
     lager:info("Drop called on: ~p", [Filter]),
-    ok.
+
+    % Start a full cluster FSM to send out the command
+    {ok, ReqId} = br_cluster_fsm:start_op(drop, Filter),
+
+    % Wait default interval for the request to complete
+    Resp = wait_for_req(ReqId),
+    case Resp of
+        {error, timeout} ->
+            lager:warning("Timed out waiting for the nodes to drop filter!"),
+            {error, timeout};
+
+        {ok, Results} ->
+            case lists:all(fun(R) -> R =:= {error, no_filter} end, Results) of
+                true -> {error, no_filter};
+                _ -> case lists:all(fun(R) -> R =:= done orelse R =:= {error, no_filter} end, Results) of
+                        true -> {ok, done};
+                        _ ->
+                            lager:warning("Nodes did not agree on drop of ~p. Responses: ~p", [Filter, Results]),
+                            {error, internal_error}
+                    end
+            end
+    end.
+
 
 %% @doc Closes a filter
 close(Filter) ->
