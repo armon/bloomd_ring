@@ -70,7 +70,13 @@ handle_info({tcp_closed, _Socket}, State) ->
 % Handle an error
 handle_info({tcp_error, _Socket, Reason}, State) ->
     lager:warning("TCP Error on socket ~p. Err: ~p", [State, Reason]),
-    {stop, normal, State}.
+    {stop, normal, State};
+
+
+% Ignore unexpected messages
+handle_info(Msg, State) ->
+    lager:warning("Got unexpected message: ~p", [Msg]),
+    {noreply, State}.
 
 
 terminate(_Reason, _State) -> ok.
