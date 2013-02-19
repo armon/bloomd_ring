@@ -11,6 +11,7 @@ apt-get install -y automake
 apt-get install -y build-essential
 apt-get install -y git-core
 apt-get install -y libtool
+apt-get install -y telnet
 
 # Compile Erlang from source
 if [ ! -f /usr/local/bin/erl ]; then
