@@ -1,58 +1,52 @@
-.PHONY: deps
+APP = bloomd
+
+# The environment we're building for. This mainly affects what
+# overlay variables are used for rel creation.
+ENVIRONMENT ?= development
 
 all: deps compile
 
 compile:
 	./rebar compile
 
-deps:
-	./rebar get-deps
-
 clean:
 	./rebar clean
 
-distclean: clean devclean relclean
-	./rebar delete-deps
+deps:
+	./rebar get-deps
 
-rel: all
-	./rebar generate
+devrel: rel
+	rm -rf rel/$(APP)/lib/$(APP)-*/ebin
+	ln -sf $(abspath ./ebin) rel/$(APP)/lib/$(APP)-*
+	echo -s sync | tee -a rel/$(APP)/releases/*/vm.args
 
-relclean:
-	rm -rf rel/bloomd
+rel: compile
+	./rebar generate -f overlay_vars=vars/$(ENVIRONMENT).config
 
-stage : rel
-	$(foreach dep,$(wildcard deps/*), rm -rf rel/bloomd/lib/$(shell basename $(dep))-* && ln -sf $(abspath $(dep)) rel/bloomd/lib;)
-	$(foreach app,$(wildcard apps/*), rm -rf rel/bloomd/lib/$(shell basename $(app))-* && ln -sf $(abspath $(app)) rel/bloomd/lib;)
+relcluster: compile
+	./rebar generate -f target_dir=node1 overlay_vars=vars/node1.config
+	./rebar generate -f target_dir=node2 overlay_vars=vars/node2.config
+	./rebar generate -f target_dir=node3 overlay_vars=vars/node3.config
 
+updatecluster:
+	rm -rf rel/node1/lib/$(APP)-*/ebin
+	cp -r $(abspath ./ebin) rel/node1/lib/$(APP)-*
+	rm -rf rel/node2/lib/$(APP)-*/ebin
+	cp -r $(abspath ./ebin) rel/node2/lib/$(APP)-*
+	rm -rf rel/node3/lib/$(APP)-*/ebin
+	cp -r $(abspath ./ebin) rel/node3/lib/$(APP)-*
 
-##
-## Developer targets
-##
-##  devN - Make a dev build for node N
-##  stagedevN - Make a stage dev build for node N (symlink libraries)
-##  devrel - Make a dev build for 1..$DEVNODES
-##  stagedevrel Make a stagedev build for 1..$DEVNODES
-##
-##  Example, make a 68 node devrel cluster
-##    make stagedevrel DEVNODES=68
+startcluster:
+	rel/node3/bin/iris start
+	rel/node2/bin/iris start
+	rel/node1/bin/iris start
 
-.PHONY : stagedevrel devrel
-DEVNODES ?= 4
+stopcluster:
+	rel/node3/bin/iris stop &
+	rel/node2/bin/iris stop &
+	rel/node1/bin/iris stop &
 
-# 'seq' is not available on all *BSD, so using an alternate in awk
-SEQ = $(shell awk 'BEGIN { for (i = 1; i < '$(DEVNODES)'; i++) printf("%i ", i); print i ;exit(0);}')
+test: compile
+	./rebar eunit apps=$(APP)
 
-$(eval stagedevrel : $(foreach n,$(SEQ),stagedev$(n)))
-$(eval devrel : $(foreach n,$(SEQ),dev$(n)))
-
-dev% : all
-	mkdir -p dev
-	rel/gen_dev $@ rel/vars/dev_vars.config.src rel/vars/$@_vars.config
-	(cd rel && ../rebar generate target_dir=../dev/$@ overlay_vars=vars/$@_vars.config)
-
-stagedev% : dev%
-	  $(foreach dep,$(wildcard deps/*), rm -rf dev/$^/lib/$(shell basename $(dep))* && ln -sf $(abspath $(dep)) dev/$^/lib;)
-	  $(foreach app,$(wildcard apps/*), rm -rf dev/$^/lib/$(shell basename $(app))* && ln -sf $(abspath $(app)) dev/$^/lib;)
-
-devclean: clean
-	rm -rf dev
+.PHONY: all compile clean deps
