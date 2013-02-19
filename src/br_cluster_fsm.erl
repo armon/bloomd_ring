@@ -1,6 +1,6 @@
 -module(br_cluster_fsm).
 -behavior(gen_fsm).
--export([start_link/4]).
+-export([start_link/4, start_op/2]).
 -export([init/1, handle_info/3, handle_event/3, handle_sync_event/4,
          code_change/4, terminate/3]).
 -export([prepare/2, executing/2, waiting/2]).
@@ -32,6 +32,12 @@
 
 start_link(ReqId, From, Op, Args) ->
     gen_fsm:start_link(?MODULE, [ReqId, From, Op, Args], []).
+
+start_op(Op, Args) ->
+    ReqId = erlang:make_ref(),
+    {ok, _} = br_cluster_fsm_sup:start_fsm([ReqId, self(), Op, Args]),
+    {ok, ReqId}.
+
 
 %%%
 % Gen FSM API
@@ -88,7 +94,7 @@ executing(timeout, State=#state{preflist=Pref, op=Op, args=Args}) ->
 
 waiting(timeout, State=#state{req_id=ReqId, from=From}) ->
     lager:warning("Timed out waiting for all responses!"),
-    From ! {ReqId, timeout},
+    From ! {ReqId, {error, timeout}},
     {stop, normal, State};
 
 waiting(Resp, State=#state{preflist=Pref, resp=Buf}) ->
