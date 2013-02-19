@@ -116,10 +116,13 @@ handle_command({create_filter, FilterName, Options}, _Sender, State) ->
     Indices = [{Slice, riak_core_util:chash_key({FilterName, Slice})} || Slice <- lists:seq(0, Partitions-1)],
 
     % Determine the preflist for each slice
-    Preflists = [{Slice, riak_core_api:get_primary_apl(Idx, 3, bloomd)} || {Slice, Idx} <- Indices],
+    Preflists = [{Slice, riak_core_apl:get_primary_apl(Idx, 3, bloomd)} || {Slice, Idx} <- Indices],
+
+    % Get just the nodes
+    PrefNodes = [{S, [N || {{_, N}, _} <- Pref]} || {S, Pref} <- Preflists],
 
     % Get the owned slices for this node
-    Owned = [Slice || {Slice, Pref} <- Preflists, lists:keyfind(node(), 2, Pref) =/= false],
+    Owned = [Slice || {Slice, Nodes} <- PrefNodes, lists:member(node(), Nodes)],
 
     % Convert into the proper names
     Names = [filter_slice_name(FilterName, S) || S <- Owned],
