@@ -18,7 +18,6 @@ deps:
 devrel: rel
 	rm -rf rel/$(APP)/lib/$(APP)-*/ebin
 	ln -sf $(abspath ./ebin) rel/$(APP)/lib/$(APP)-*
-	echo -s sync | tee -a rel/$(APP)/releases/*/vm.args
 
 rel: compile
 	./rebar generate -f overlay_vars=vars/$(ENVIRONMENT).config
