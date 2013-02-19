@@ -72,8 +72,9 @@ terminate(_Reason, _StateName, _State) ->
 
 % Prepares for execution, gets the preflist ready
 prepare(timeout, State) ->
-    Preflist = riak_core_apl:active_owners(bloomd),
-    {next_state, execute, State#state{preflist=Preflist}, 0}.
+    {ok, Ring} = riak_core_ring_manager:get_my_ring(),
+    Preflist = riak_core_ring:all_owners(Ring),
+    {next_state, executing, State#state{preflist=Preflist}, 0}.
 
 
 -define(MASTER, br_vnode_master).
