@@ -111,9 +111,15 @@ handle_command({set_filter, FilterName, Slice, Key}, Sender, State) ->
 % We should respond with one of done, exists, or {error, command_failed}
 %%%
 handle_command({create_filter, FilterName, Options}, _Sender, State) ->
-    % Get the owned indexes for this node
-    {ok, Ring} = riak_core_ring_manager:get_my_ring(),
-    Owned = riak_core_ring:my_indices(Ring),
+    % Generate a list of {Slice, Hash} for each slice
+    Partitions = br_util:num_partitions(),
+    Indices = [{Slice, riak_core_util:chash_key({FilterName, Slice})} || Slice <- lists:seq(0, Partitions-1)],
+
+    % Determine the preflist for each slice
+    Preflists = [{Slice, riak_core_api:get_primary_apl(Idx, 3, bloomd)} || {Slice, Idx} <- Indices],
+
+    % Get the owned slices for this node
+    Owned = [Slice || {Slice, Pref} <- Preflists, lists:keyfind(node(), 2, Pref) =/= false],
 
     % Convert into the proper names
     Names = [filter_slice_name(FilterName, S) || S <- Owned],
