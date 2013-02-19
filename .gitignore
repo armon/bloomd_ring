@@ -5,3 +5,5 @@ ebin/*
 rel/bloomd
 dev
 apps/bloomd/src/*
+.vagrant
+
