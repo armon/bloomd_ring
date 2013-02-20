@@ -2,7 +2,7 @@
 -include("bloomd_ring.hrl").
 -include_lib("riak_core/include/riak_core_vnode.hrl").
 
--export([ping/0, create/2, list/0, drop/1, close/1, clear/1,
+-export([ping/0, create/2, list/1, drop/1, close/1, clear/1,
         check/2, multi/2, set/2, bulk/2, info/2, flush/1]).
 
 -define(DEFAULT_TIMEOUT, 30000).
@@ -65,9 +65,37 @@ create(Filter, OptionsList) ->
 
 
 %% @doc Lists all the existing filters using a covering set query
-list() ->
-    lager:info("List called"),
-    {ok, []}.
+list(Absolute) ->
+    lager:info("List called. Absolute: ~p", [Absolute]),
+
+    % Start a full cluster FSM to send out the command
+    {ok, ReqId} = case Absolute of
+        true -> br_cluster_fsm:start_op(list, undefined);
+        false -> br_coverage_fsm:start_op(list, undefined)
+    end,
+
+    % Wait default interval for the request to complete
+    Resp = wait_for_req(ReqId),
+    case Resp of
+        {error, timeout} ->
+            lager:warning("Timed out waiting for the nodes to list filters!"),
+            {error, timeout};
+
+        {ok, Results} ->
+            {_Errors, Valid} = lists:partition(fun({error, _}) -> true; (_) -> false end, Results),
+            case Valid of
+                [] ->
+                    lager:warning("Nodes failed to list. Responses: ~p", [Results]),
+                    {error, internal_error};
+                _ ->
+                    % Flatten all the result info
+                    FilterInfo = lists:append([I || {ok, I} <- Valid]),
+
+                    % Merge and reconcile the values
+                    Merged = br_util:collapse_list_info(FilterInfo),
+                    {ok, Merged}
+            end
+    end.
 
 
 %% @doc Drops a filter

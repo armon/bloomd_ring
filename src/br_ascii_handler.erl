@@ -240,12 +240,41 @@ process_cmd(State, <<"create ", Rest/binary>>) ->
     end,
     State;
 
+
 process_cmd(State, <<"list", Rest/binary>>) ->
-    no_args_needed(fun() ->
-        _Result = bloomd_ring:list(),
-        % TODO: Handle Response
-        State
-    end, Rest, State);
+    Result = case split(Rest, ?SPACE, true) of
+        % Handle the +absolute extension case
+        [Modifier] when Modifier =:= <<"+absolute">> ->
+            bloomd_ring:list(true);
+        % Handle standard case
+        [] -> bloomd_ring:list(false);
+        % Too many args
+        _ -> {error, unexpected_args}
+    end,
+    case Result of
+        {error, unexpected_args} ->
+            gen_tcp:send(State#state.socket,
+                         [?CLIENT_ERR, ?UNEXPECTED_ARGS, ?NEWLINE]);
+        {error, _} ->
+            gen_tcp:send(State#state.socket, [?INTERNAL_ERR]);
+
+        {ok, Results} ->
+            % Format the results
+            Formatted = lists:map(fun({Filter, Info}) ->
+                Prob      = proplists:get_value(probability, Info, 0),
+                Bytes     = proplists:get_value(bytes, Info, 0),
+                Capacity  = proplists:get_value(capacity, Info, 0),
+                Size      = proplists:get_value(size, Info, 0),
+                [Filter, ?SPACE,
+                        format_float(Prob), ?SPACE,
+                        integer_to_list(Bytes), ?SPACE,
+                        integer_to_list(Capacity), ?SPACE,
+                        integer_to_list(Size)]
+            end, Results),
+            send_list(State#state.socket, Formatted)
+    end,
+    State;
+
 
 % Handle the filter vs no-filter case
 process_cmd(State, <<"flush ", Rest/binary>>) ->
@@ -513,10 +542,10 @@ split(Bin, Patterns, Global) ->
 % N2
 % ..
 % END
-%send_list(Sock, List) ->
-%    % Terminate each line
-%    Terminated = [[Line, ?NEWLINE] || Line <- List],
-%    gen_tcp:send(Sock, [?START, Terminated, ?END]).
+send_list(Sock, List) ->
+    % Terminate each line
+    Terminated = [[Line, ?NEWLINE] || Line <- List],
+    gen_tcp:send(Sock, [?START, Terminated, ?END]).
 
 
 -spec to_float(binary()) -> error | float().
@@ -539,15 +568,17 @@ to_integer(Bin) ->
 
 
 % Gives a nice base 10 representation of a float
-%format_float(Val) ->
-%    % Get the whole number part
-%    WholePart = trunc(Val),
+format_float(Val) ->
+    % Get the whole number part
+    WholePart = trunc(Val),
 
-%    % Get the sub part
-%    SubPart = abs(trunc(Val * 10000)) rem 10000,
+    % Get the sub part
+    SubPart = abs(trunc(Val * 1000000)) rem 1000000,
 
-%    % Convert to iolist
-%    [integer_to_list(WholePart), ".", integer_to_list(SubPart)].
+    % Convert to iolist
+    SubL = integer_to_list(SubPart),
+    Pad = ["0" || _X <- lists:seq(1, 6 - length(SubL))],
+    [integer_to_list(WholePart), ".", Pad, SubL].
 
 
 
@@ -564,8 +595,9 @@ to_int_test() ->
     ?assertEqual(1, to_integer(<<"1">>)),
     ?assertEqual(-1, to_integer(<<"-1">>)).
 
-%format_float_test() ->
-%    ?assertEqual(["-123", ".", "1234"], format_float(-123.123456)),
-%    ?assertEqual(["123", ".", "1234"], format_float(123.123456)).
+format_float_test() ->
+    ?assertEqual(["-123", ".", [], "123456"], format_float(-123.123456)),
+    ?assertEqual(["123", ".", [], "123456"], format_float(123.123456)),
+    ?assertEqual(["0", ".", ["0", "0"], "1000"], format_float(0.001)).
 
 -endif.
