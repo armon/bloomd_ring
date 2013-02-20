@@ -188,7 +188,7 @@ the vnode may need to do a list, find all the relevant slices, and
 flush them all. `done` should only be returned if all slices were
 flushed. Otherwise an appropriate error should be returned.
 
-It is possible for FilterName to be specified as `all`. In this case,
+It is possible for FilterName to be specified as `undefined`. In this case,
 the vnode should issue a flush with no filter to the local bloomd
 instnace, and thus cause all the filters to be flushed.
 

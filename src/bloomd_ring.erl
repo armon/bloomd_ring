@@ -7,6 +7,7 @@
 
 -define(DEFAULT_TIMEOUT, 30000).
 -define(LONG_WAIT, 60000).
+-define(EXTREME_WAIT, 300000).
 
 %% Public API
 
@@ -183,7 +184,28 @@ info(Filter, Absolute) ->
 %% @doc Flushes either a given filter, or all filters.
 flush(Filter) ->
     lager:info("Flush called on: ~p", [Filter]),
-    ok.
+
+    % Start a full cluster FSM to send out the command
+    {ok, ReqId} = br_cluster_fsm:start_op(flush, Filter),
+
+    % Wait default interval for the request to complete
+    Resp = wait_for_req(ReqId, ?EXTREME_WAIT),
+    case Resp of
+        {error, timeout} ->
+            lager:warning("Timed out waiting for the nodes to flush!"),
+            {error, timeout};
+
+        {ok, Results} ->
+            case lists:all(fun(R) -> R =:= {error, no_filter} end, Results) of
+                true -> {error, no_filter};
+                _ -> case lists:all(fun(R) -> R =:= done orelse R =:= {error, no_filter} end, Results) of
+                        true -> {ok, done};
+                        _ ->
+                            lager:warning("Nodes did not agree on flush of ~p. Responses: ~p", [Filter, Results]),
+                            {error, internal_error}
+                    end
+            end
+    end.
 
 
 %%%

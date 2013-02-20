@@ -250,14 +250,29 @@ process_cmd(State, <<"list", Rest/binary>>) ->
 % Handle the filter vs no-filter case
 process_cmd(State, <<"flush ", Rest/binary>>) ->
     filter_needed(fun(Filter) ->
-        _Result = bloomd_ring:flush(Filter),
-        % TODO: Handle response
+        Result = bloomd_ring:flush(Filter),
+        case Result of
+            {ok, done} ->
+                gen_tcp:send(State#state.socket, [?DONE]);
+            {error, no_filter} ->
+                gen_tcp:send(State#state.socket, [?FILT_NOT_EXIST]);
+            {error, _} ->
+                gen_tcp:send(State#state.socket, [?INTERNAL_ERR])
+        end,
         State
     end, Rest, State);
+
 process_cmd(State, <<"flush", Rest/binary>>) ->
     no_args_needed(fun() ->
-        _Result = bloomd_ring:flush(undefined),
-        % TODO: Handle Response
+        Result = bloomd_ring:flush(undefined),
+        case Result of
+            {ok, done} ->
+                gen_tcp:send(State#state.socket, [?DONE]);
+            {error, no_filter} ->
+                gen_tcp:send(State#state.socket, [?FILT_NOT_EXIST]);
+            {error, _} ->
+                gen_tcp:send(State#state.socket, [?INTERNAL_ERR])
+        end,
         State
     end, Rest, State);
 

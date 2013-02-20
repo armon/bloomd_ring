@@ -266,7 +266,7 @@ handle_command({clear_filter, FilterName}, _Sender, State) ->
 %%%
 handle_command({flush_filter, FilterName}, _Sender, State) ->
     Resp = case FilterName of
-        all ->
+        undefined ->
             % Find all the filters
             Results = bloomd:list(State#state.conn),
 
