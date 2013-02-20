@@ -160,12 +160,12 @@ handle_command(list_filters, _Sender, State) ->
         {error, _} -> {error, command_failed};
         _ ->
             % Extract the filter info
-            FilterInfoList = [{Name, {Slice, bloomd:filter_info(I)}} || {F, I} <- Results,
-                                                        {Name, Slice} = filter_slice_value(F)],
+            % {{FilterName, Slice}, Info}
+            FilterInfoList = [{filter_slice_value(F), bloomd:filter_info(I)} || {F, I} <- Results],
 
             % Collapse the duplicates by name
-            FilterCombined = lists:foldl(fun({Name, Info}, Accum) ->
-                dict:append(Name, Info, Accum)
+            FilterCombined = lists:foldl(fun({{Name, Slice}, Info}, Accum) ->
+                dict:append(Name, {Slice, Info}, Accum)
             end, dict:new(), FilterInfoList),
 
             % Return the slice info
@@ -479,7 +479,7 @@ find_last_bad_test() ->
     {error, not_found} = find_last(<<"hi there">>, $@, 7).
 
 find_last_multi_test() ->
-    Off = find_last(<<"a:b:c:d">>, $:, 6).
+    Off = find_last(<<"a:b:c:d">>, $:, 6),
     Off = 5.
 
 any_error_blank_test() ->
@@ -492,13 +492,13 @@ any_error_false_test() ->
     false = any_error([good, ok, tubez]).
 
 has_error_blank_test() ->
-    false = hash_error([], [a,b,c]).
+    false = has_error([], [a,b,c]).
 
 has_error_true_test() ->
-    true = hash_error([good, bad, {error, tubez}, {error, bad}], [bad]).
+    true = has_error([good, bad, {error, tubez}, {error, bad}], [bad]).
 
 has_error_false_test() ->
-    false = hash_error([good, bad, {error, tubez}, {error, bad}], [notexist]).
+    false = has_error([good, bad, {error, tubez}, {error, bad}], [notexist]).
 
 -endif.
 
