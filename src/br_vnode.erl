@@ -412,11 +412,12 @@ filter_slice_name(FilterName, Slice) -> [FilterName, <<":">>, integer_to_list(Sl
 -spec filter_slice_value(iolist()) -> {binary(), integer()}.
 filter_slice_value(Filter) when is_binary(Filter) ->
     % Find the offset of the colon
-    Offset = find_last(Filter, $:, size(Filter) - 1),
+    Size = size(Filter),
+    Offset = find_last(Filter, $:, Size - 1),
 
     % Split
     Name = binary:part(Filter, 0, Offset),
-    Num = binary:part(Filter, Offset+1),
+    Num = binary:part(Filter, Offset+1, Size-Offset-1),
 
     % Convert to integer and return
     {Name, list_to_integer(binary_to_list(Num))};
@@ -436,7 +437,7 @@ find_last(Bin, Char, Offset) ->
 any_error(Results) -> lists:any(fun({error, _}) -> true; (_) -> false end, Results).
 
 % Checks if any of the results has a given error type
-has_error(Results, Errors) -> lists:any(fun({error, E}) -> lists:contains(E, Errors); (_) -> false end, Results).
+has_error(Results, Errors) -> lists:any(fun({error, E}) -> lists:member(E, Errors); (_) -> false end, Results).
 
 % Finds all the slices matching the given filter name in the local bloomd
 % Returns a list of the slice names.
@@ -450,9 +451,8 @@ matching_slices(FilterName, State) ->
         true -> {error, command_failed};
         _ ->
             % Find all the matching slices
-            [F || {F, _I} <- Results,
-                {Name, _Slice} = filter_slice_value(F),
-                  Name =:= FilterName]
+            Parts = [{F, filter_slice_value(F)} || {F, _I} <- Results],
+            [F || {F, {Name, _Slice}} <- Parts, Name =:= FilterName]
     end.
 
 
