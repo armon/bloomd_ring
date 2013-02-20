@@ -59,6 +59,12 @@ The list operator is used to find all the available filters in the system, as we
 as some useful information about size, usage, etc. This command requires _coverage_.
 This means, that 1/N nodes need to be queried to determine all the available filters.
 
+There is also an extension implementation that provides more accurate information.
+This mode forces a full-cluster query instead of just coverage. It is invoked using
+
+    list +absolute
+
+
 drop
 -----
 
