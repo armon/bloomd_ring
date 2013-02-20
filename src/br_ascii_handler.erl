@@ -28,7 +28,7 @@
 -define(NO_SPACE, <<"No ">>).
 -define(YES_RESP, <<"Yes\n">>).
 -define(NO_RESP, <<"No\n">>).
--define(VALID_FILT_RE, "^[a-zA-Z0-9._-]{1,200}$").
+-define(VALID_FILT_RE, "^[^\s]{1,200}$").
 
 
 -ifdef(TEST).
