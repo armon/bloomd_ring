@@ -87,7 +87,8 @@ executing(timeout, State=#state{preflist=Pref, op=Op, args=Args}) ->
         close -> {close_filter, Args};
         clear -> {clear_filter, Args};
         flush -> {flush_filter, Args};
-        info -> {info_filter, Args}
+        info -> {info_filter, Args};
+        list -> list_filters
     end,
     riak_core_vnode_master:command(Pref, Cmd, {fsm, undefined, self()}, ?MASTER),
     {next_state, waiting, State, ?WAIT_TIMEOUT}.
