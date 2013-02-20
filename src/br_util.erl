@@ -2,7 +2,12 @@
 -export([ceiling/1,
          num_partitions/0,
          keyslice/1,
-         keyslice/2]).
+         keyslice/2,
+         merge_slice_list_info/1,
+         collapse_slice_list_info/1,
+         merge_filter_list_info/1,
+         collapse_list_info/1
+        ]).
 
 % Implements the mathematical ceiling operator
 ceiling(X) when X < 0 ->
@@ -35,3 +40,139 @@ keyslice(Key, Partitions) ->
     % Mod by the ring size
     Digest rem Partitions.
 
+
+% Merges the slice information returned by the `list` command for
+% a single slice. Slice information is merged by taking the maximum
+% of each value.
+-spec merge_slice_list_info([Info :: list()]) -> list().
+merge_slice_list_info(SliceInfo) ->
+    Merged = lists:foldl(fun(Info, Accum) ->
+        dict:merge(fun(_K, V1, V2) ->
+            case V1 >= V2 of
+                true -> V1;
+                _ -> V2
+            end
+        end, Accum, dict:from_list(Info))
+    end, dict:new(), SliceInfo),
+    dict:to_list(Merged).
+
+% Collapses and merges all the slices and their info.
+% This is done by first grouping all the data by slice,
+% and then merging the data for each slice.
+-spec collapse_slice_list_info([{Slice :: term(), Info :: list()}]) -> [{Slice :: term(), Info :: list()}].
+collapse_slice_list_info(SliceInfo) ->
+    % Make a map of the slice to a list of all the info's
+    Combined = lists:foldl(fun({Slice, Info}, Accum) ->
+        dict:append(Slice, Info, Accum)
+    end, dict:new(), SliceInfo),
+
+    % Merge the slice info
+    Merged = dict:map(fun(_K, V) ->
+        merge_slice_list_info(V)
+    end, Combined),
+
+    % Convert back to a list
+    dict:to_list(Merged).
+
+% Merges the information about a single filter into
+% a single info property list. This is done by collapsing the
+% slice information, and then taking the sum of each slice property
+% except for probability, which uses the maximum.
+-spec merge_filter_list_info([{Slice :: term(), Info:: list()}]) -> list().
+merge_filter_list_info(FilterInfo) ->
+    % Collapse the slice info first
+    SliceInfo = collapse_slice_list_info(FilterInfo),
+
+    % Merge the slices together. We sum everything other
+    % than probability.
+    Merged = lists:foldl(fun({_Slice, Info}, Accum) ->
+        dict:merge(fun(K, V1, V2) ->
+            case K of
+                probability ->
+                    case V1 >= V2 of
+                        true -> V1;
+                        _ -> V2
+                    end;
+                _ -> V1 + V2
+            end
+        end, Accum, dict:from_list(Info))
+    end, dict:new(), SliceInfo),
+
+    % Convert back to list
+    dict:to_list(Merged).
+
+% Collapses the information from a list operation.
+% First we group the data by filter, and then merge
+% all the filter information.
+collapse_list_info(ListInfo) ->
+    % Group by filter first
+    Grouped = lists:foldl(fun({Filter, Slices}, Accum) ->
+        dict:append_list(Filter, Slices, Accum)
+    end, dict:new(), ListInfo),
+
+    % Merge all the filter info down
+    Merged = dict:map(fun(_K, V) ->
+        merge_filter_list_info(V)
+    end, Grouped),
+
+    % Convert back to list
+    dict:to_list(Merged).
+
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+merge_slice_list_info_test() ->
+    Info1 = [{probability, 0.001}, {bytes, 100}, {capacity, 1000}, {size, 2000}],
+    Info2 = [{probability, 0.001}, {bytes, 200}, {capacity, 2000}, {size, 3000}],
+    Info3 = [{probability, 0.002}, {bytes, 100}, {capacity, 1000}, {size, 4000}],
+    Merged = merge_slice_list_info([Info1, Info2, Info3]),
+    Expect = [{bytes, 200}, {size, 4000}, {capacity, 2000}, {probability, 0.002}],
+    Expect = Merged.
+
+collapse_slice_list_info_test() ->
+    Info1 = {1, [{probability, 0.001}, {bytes, 100}, {capacity, 1000}, {size, 2000}]},
+    Info2 = {1, [{probability, 0.002}, {bytes, 200}, {capacity, 2000}, {size, 3000}]},
+    Info3 = {2, [{probability, 0.001}, {bytes, 100}, {capacity, 1000}, {size, 4000}]},
+    Info4 = {2, [{probability, 0.005}, {bytes, 150}, {capacity, 4000}, {size, 2000}]},
+    Merged = collapse_slice_list_info([Info1, Info2, Info3, Info4]),
+    Expect = [
+            {2, [{bytes, 150}, {size, 4000}, {capacity, 4000}, {probability, 0.005}]},
+            {1, [{bytes, 200}, {size, 3000}, {capacity, 2000}, {probability, 0.002}]}
+             ],
+    ?assertEqual(Expect, Merged).
+
+merge_filter_list_info_test() ->
+    Info1 = {1, [{probability, 0.001}, {bytes, 100}, {capacity, 1000}, {size, 2000}]},
+    Info2 = {1, [{probability, 0.002}, {bytes, 200}, {capacity, 2000}, {size, 3000}]},
+    Info3 = {2, [{probability, 0.001}, {bytes, 100}, {capacity, 1000}, {size, 4000}]},
+    Info4 = {2, [{probability, 0.005}, {bytes, 150}, {capacity, 4000}, {size, 2000}]},
+    Merged = merge_filter_list_info([Info1, Info2, Info3, Info4]),
+    Expect = [{bytes, 350}, {size, 7000}, {probability, 0.005}, {capacity, 6000}],
+    ?assertEqual(Expect, Merged).
+
+collapse_list_info_test() ->
+    Info1 = {<<"Test">>, [
+                {1, [{probability, 0.001}, {bytes, 100}, {capacity, 1000}, {size, 2000}]},
+                {2, [{probability, 0.001}, {bytes, 100}, {capacity, 1000}, {size, 4000}]}
+            ]},
+    Info2 = {<<"Test">>, [
+                {1, [{probability, 0.002}, {bytes, 200}, {capacity, 2000}, {size, 3000}]},
+                {2, [{probability, 0.005}, {bytes, 150}, {capacity, 4000}, {size, 2000}]}
+            ]},
+    Info3 = {<<"Foo">>, [
+                {3, [{probability, 0.001}, {bytes, 100}, {capacity, 1000}, {size, 2000}]},
+                {4, [{probability, 0.001}, {bytes, 100}, {capacity, 1000}, {size, 4000}]}
+            ]},
+    Info4 = {<<"Foo">>, [
+                {3, [{probability, 0.002}, {bytes, 200}, {capacity, 2000}, {size, 3000}]},
+                {4, [{probability, 0.005}, {bytes, 150}, {capacity, 4000}, {size, 8000}]}
+            ]},
+    Merged = collapse_list_info([Info1, Info2, Info3, Info4]),
+    Expect = [
+            {<<"Test">>, [{bytes, 350}, {size, 7000}, {probability, 0.005}, {capacity, 6000}]},
+            {<<"Foo">>, [{bytes, 350}, {size, 11000}, {probability, 0.005}, {capacity, 6000}]}
+            ],
+    ?assertEqual(Expect, Merged).
+
+-endif.
