@@ -44,7 +44,11 @@ init(_Args) ->
                   {br_cluster_fsm_sup, start_link, []},
                   permanent, 60000, supervisor, dynamic},
 
+    CoverageFSM = {br_coverage_fsm_sup,
+                  {br_coverage_fsm_sup, start_link, []},
+                  permanent, 60000, supervisor, dynamic},
+
     { ok,
         { {one_for_one, 5, 10},
-          [ConnManager, AcceptManager, VMaster, ClusterFSM]}}.
+          [ConnManager, AcceptManager, VMaster, ClusterFSM, CoverageFSM]}}.
 
