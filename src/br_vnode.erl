@@ -329,7 +329,7 @@ handle_command({info_filter, FilterName}, _Sender, State) ->
                         {_, Num} = filter_slice_value(Slice),
 
                         % Map the number to the info
-                        {Num, Info}
+                        {Num, bloomd:info_proplist(Info)}
                     end, Slices, InfoResults),
 
                     % Return the paired info
