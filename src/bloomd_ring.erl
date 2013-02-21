@@ -207,7 +207,40 @@ bulk(Filter, Keys) ->
 %% @doc Gets information about a filter
 info(Filter, Absolute) ->
     lager:info("Info called on: ~p with absolute: ~p", [Filter, Absolute]),
-    ok.
+
+    % Start an FSM to send out the command
+    {ok, ReqId} = case Absolute of
+        true -> br_cluster_fsm:start_op(info, Filter);
+        false -> br_coverage_fsm:start_op(info, Filter)
+    end,
+
+    % Wait default interval for the request to complete
+    Resp = wait_for_req(ReqId),
+    case Resp of
+        {error, timeout} ->
+            lager:warning("Timed out waiting for the nodes to get filter info!"),
+            {error, timeout};
+
+        {ok, Results} ->
+            {_Errors, Valid} = lists:partition(fun({error, _}) -> true; (_) -> false end, Results),
+            case Valid of
+                [] ->
+                    case lists:all(fun({error, no_filter}) -> true; (_) -> false end, Results) of
+                        true -> {error, no_filter};
+                        _ ->
+                            lager:warning("Nodes failed to get info. Responses: ~p", [Results]),
+                            {error, internal_error}
+                    end;
+                _ ->
+                    % Flatten all the result info
+                    FilterInfo = lists:append([I || {ok, I} <- Valid]),
+
+                    % Merge and reconcile the values
+                    Merged = br_util:merge_filter_info(FilterInfo),
+                    {ok, Merged}
+            end
+    end.
+
 
 %% @doc Flushes either a given filter, or all filters.
 flush(Filter) ->
