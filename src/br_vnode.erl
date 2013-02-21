@@ -32,6 +32,10 @@
         handoff=false
         }).
 
+% This is the replication factor
+-define(N, 3).
+
+
 %% API
 start_vnode(I) ->
     riak_core_vnode_master:get_vnode_pid(I, ?MODULE).
@@ -52,11 +56,11 @@ init([Partition]) ->
 % directly, since we know exactly which slice handles it.
 %%%
 handle_command({check_filter, FilterName, Slice, Key}, Sender, State) ->
-    % Convert into the proper names
-    Name = filter_slice_name(FilterName, Slice),
-
     % Make use of pipelining instead of blocking the v-node
     spawn(fun() ->
+        % Convert into the proper names
+        Name = filter_slice_name(FilterName, Slice),
+
         % Query bloomd
         F = bloomd:filter(State#state.conn, Name),
         Res = bloomd:check(F, Key),
@@ -80,11 +84,11 @@ handle_command({check_filter, FilterName, Slice, Key}, Sender, State) ->
 % directly, since we know exactly which slice handles it.
 %%%
 handle_command({set_filter, FilterName, Slice, Key}, Sender, State) ->
-    % Convert into the proper names
-    Name = filter_slice_name(FilterName, Slice),
-
     % Make use of pipelining instead of blocking the v-node
     spawn(fun() ->
+        % Convert into the proper names
+        Name = filter_slice_name(FilterName, Slice),
+
         % Query bloomd
         F = bloomd:filter(State#state.conn, Name),
         Res = bloomd:set(F, Key),
@@ -116,7 +120,7 @@ handle_command({create_filter, FilterName, Options}, _Sender, State) ->
     Indices = [{Slice, riak_core_util:chash_key({FilterName, Slice})} || Slice <- lists:seq(0, Partitions-1)],
 
     % Determine the preflist for each slice
-    Preflists = [{Slice, riak_core_apl:get_primary_apl(Idx, 3, bloomd)} || {Slice, Idx} <- Indices],
+    Preflists = [{Slice, riak_core_apl:get_primary_apl(Idx, ?N, bloomd)} || {Slice, Idx} <- Indices],
 
     % Get just the nodes
     PrefNodes = [{S, [N || {{_, N}, _} <- Pref]} || {S, Pref} <- Preflists],
