@@ -125,40 +125,60 @@ process_cmd(State, <<"bulk ", Rest/binary>>) ->
     process_bulk(State, Rest);
 
 process_cmd(State, <<"info ", Rest/binary>>) ->
-    case split(Rest, ?SPACE, true) of
+    % Get the filter and if absolute mode is one
+    ParseResult = case split(Rest, ?SPACE, true) of
         % Handle the +absolute extension case
         [Filter, Modifier] when Modifier =:= <<"+absolute">> ->
-            case valid_filter(Filter) of
-                true ->
-                    _Result = bloomd_ring:info(Filter, true);
-                    % TODO: Handle response
-
-                _ ->
-                    gen_tcp:send(State#state.socket,
-                                 [?CLIENT_ERR, ?BAD_FILT_NAME, ?NEWLINE])
-            end;
+            {Filter, true};
 
         % Handle standard info case
-        [Filter] ->
-            case valid_filter(Filter) of
-                true ->
-                    _Result = bloomd_ring:info(Filter, false);
-                    % TODO: Handle response
-
-                _ ->
-                    gen_tcp:send(State#state.socket,
-                                 [?CLIENT_ERR, ?BAD_FILT_NAME, ?NEWLINE])
-            end;
+        [Filter] -> {Filter, false};
 
         % Handle the no filter case
-        [] ->
-            gen_tcp:send(State#state.socket,
-                         [?CLIENT_ERR, ?FILT_NEEDED, ?NEWLINE]);
+        [] -> {error, need_filter};
 
         % Handle the too many args case
-        _ ->
+        _ -> {error, unexpected_args}
+    end,
+
+    % Determine the result of the call
+    Result = case ParseResult of
+        {error, ErrType} -> {error, ErrType};
+        {F, Abs} ->
+            case valid_filter(F) of
+                true -> bloomd_ring:info(F, Abs);
+                _ -> {error, bad_filter}
+           end
+    end,
+
+    % Respond to the client
+    case Result of
+        {ok, Props} ->
+            % Format the response block
+            Formatted = lists:map(fun({Prop, Val}) ->
+                V = case Prop of
+                    probability -> format_float(Val);
+                    _ -> integer_to_list(Val)
+                end,
+                [atom_to_list(Prop), ?SPACE, V]
+            end, Props),
+
+            % Send the response
+            send_list(State#state.socket, Formatted);
+
+        {error, need_filter} ->
             gen_tcp:send(State#state.socket,
-                         [?CLIENT_ERR, ?UNEXPECTED_ARGS, ?NEWLINE])
+                         [?CLIENT_ERR, ?FILT_NEEDED, ?NEWLINE]);
+        {error, unexpected_args} ->
+            gen_tcp:send(State#state.socket,
+                         [?CLIENT_ERR, ?UNEXPECTED_ARGS, ?NEWLINE]);
+        {error, bad_filter} ->
+            gen_tcp:send(State#state.socket,
+                         [?CLIENT_ERR, ?BAD_FILT_NAME, ?NEWLINE]);
+        {error, no_filter} ->
+            gen_tcp:send(State#state.socket, [?FILT_NOT_EXIST]);
+        {error, _} ->
+            gen_tcp:send(State#state.socket, [?INTERNAL_ERR])
     end,
     State;
 
