@@ -48,7 +48,12 @@ init(_Args) ->
                   {br_coverage_fsm_sup, start_link, []},
                   permanent, 60000, supervisor, dynamic},
 
+    QuorumFSM = {br_quorum_fsm_sup,
+                  {br_quorum_fsm_sup, start_link, []},
+                  permanent, 60000, supervisor, dynamic},
+
     { ok,
         { {one_for_one, 5, 10},
-          [ConnManager, AcceptManager, VMaster, ClusterFSM, CoverageFSM]}}.
+          [ConnManager, AcceptManager, VMaster,
+           ClusterFSM, CoverageFSM, QuorumFSM]}}.
 
