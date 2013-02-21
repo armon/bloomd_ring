@@ -9,6 +9,9 @@
          collapse_list_info/1
         ]).
 
+% Limit of phash2, 2^32
+-define(HASH_LIMIT, 4294967296).
+
 % Implements the mathematical ceiling operator
 ceiling(X) when X < 0 ->
     trunc(X);
@@ -33,9 +36,10 @@ keyslice(Key) ->
 
 % Given a key and the number of partitions, returns which
 % slice owns the given key
-keyslice(Key, Partitions) ->
-    % Get a SHA1 digest
-    <<Digest:160/integer>> = crypto:sha(term_to_binary(Key)),
+keyslice(Key, Partitions) when is_binary(Key), is_integer(Partitions) ->
+    % Just use erlang:phash2 for distribution.
+    % We want something that is fast and reasonably distributed
+    Digest = erlang:phash2(Key, ?HASH_LIMIT),
 
     % Mod by the ring size
     Digest rem Partitions.
