@@ -374,6 +374,12 @@ is_empty(State) ->
 delete(State) ->
     {ok, State}.
 
+% Normal handling of list_filters and info_filters
+handle_coverage(Cmd=list_filters, _KeySpaces, Sender, State) ->
+    handle_command(Cmd, Sender, State);
+handle_coverage(Cmd={info_filter, _}, _KeySpaces, Sender, State) ->
+    handle_command(Cmd, Sender, State);
+
 handle_coverage(_Req, _KeySpaces, _Sender, State) ->
     {stop, not_implemented, State}.
 

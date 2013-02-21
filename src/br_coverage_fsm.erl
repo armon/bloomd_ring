@@ -29,10 +29,12 @@
 %%%
 
 start_link(ReqId, From, Op, Args) ->
-    riak_core_coverage_fsm:start_link(?MODULE, {pid, ReqId, From}, [ReqId, From, Op, Args], []).
+    riak_core_coverage_fsm:start_link(?MODULE, {pid, ReqId, From}, [ReqId, From, Op, Args]).
 
 start_op(Op, Args) ->
-    ReqId = erlang:make_ref(),
+    % We need the ReqId to be an integer for the purposes of coverage fsm
+    {Mega, Sec, Micro} = os:timestamp(),
+    ReqId = Mega * (1000000*1000000) + Sec * 1000000 + Micro,
     {ok, _} = br_coverage_fsm_sup:start_fsm([ReqId, self(), Op, Args]),
     {ok, ReqId}.
 
@@ -53,17 +55,20 @@ init(_, [ReqId, From, Op, Args]) ->
 
 process_results(Resp, State=#state{resp=Buf}) ->
     NewBuf = [Resp | Buf],
-    {ok, State#state{resp=NewBuf}}.
+    {done, State#state{resp=NewBuf}}.
 
 
-finish(clean, #state{req_id=ReqId, from=From, resp=Buf}) ->
-    From ! {ReqId, {ok, Buf}};
+finish(clean, S=#state{req_id=ReqId, from=From, resp=Buf}) ->
+    From ! {ReqId, {ok, Buf}},
+    {stop, normal, S};
 
-finish({error, timeout}, #state{req_id=ReqId, from=From}) ->
+finish({error, timeout}, S=#state{req_id=ReqId, from=From}) ->
     lager:warning("Timed out waiting for all responses!"),
-    From ! {ReqId, {error, timeout}};
+    From ! {ReqId, {error, timeout}},
+    {stop, normal, S};
 
-finish(Reason, #state{req_id=ReqId, from=From}) ->
+finish(Reason, S=#state{req_id=ReqId, from=From}) ->
     lager:warning("Coverage query failed! Reason: ~p", [Reason]),
-    From ! {ReqId, {error, Reason}}.
+    From ! {ReqId, {error, Reason}},
+    {stop, normal, S}.
 
