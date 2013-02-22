@@ -188,22 +188,66 @@ clear(Filter) ->
 %% @doc Checks for a key in a filter
 check(Filter, Key) ->
     lager:info("Check called on: ~p for: ~p", [Filter, Key]),
-    ok.
+
+    % Start a quorum FSM to send out the command
+    {ok, ReqId} = br_quorum_fsm:start_op(check, {Filter, Key}),
+
+    % Short wait interval for the request to complete
+    Resp = wait_for_req(ReqId, ?SHORT_WAIT),
+    case Resp of
+        {ok, Result} -> {ok, Result};
+        {error, ErrType} ->
+            Err = case ErrType of
+                % Ignore expected errors
+                no_filter -> no_filter;
+                timeout ->
+                    lager:warning("Timed out waiting for the nodes to check the filter!"),
+                    ErrType;
+                _ ->
+                    lager:warning("Nodes failed to check. Response: ~p", [Resp]),
+                    internal_error
+            end,
+            {error, Err}
+    end.
+
 
 %% @doc Checks for multiple keys in a filter
 multi(Filter, Keys) ->
     lager:info("Multi called on: ~p for: ~p", [Filter, Keys]),
     ok.
 
+
 %% @doc Sets a key in a filter
 set(Filter, Key) ->
     lager:info("Set called on: ~p for: ~p", [Filter, Key]),
-    ok.
+
+    % Start a quorum FSM to send out the command
+    {ok, ReqId} = br_quorum_fsm:start_op(set, {Filter, Key}),
+
+    % Short wait interval for the request to complete
+    Resp = wait_for_req(ReqId, ?SHORT_WAIT),
+    case Resp of
+        {ok, Result} -> {ok, Result};
+        {error, ErrType} ->
+            Err = case ErrType of
+                % Ignore expected errors
+                no_filter -> no_filter;
+                timeout ->
+                    lager:warning("Timed out waiting for the nodes to set the filter!"),
+                    ErrType;
+                _ ->
+                    lager:warning("Nodes failed to set. Response: ~p", [Resp]),
+                    internal_error
+            end,
+            {error, Err}
+    end.
+
 
 %% @doc Sets multiple keys in a filter
 bulk(Filter, Keys) ->
     lager:info("Bulk called on: ~p for: ~p", [Filter, Keys]),
     ok.
+
 
 %% @doc Gets information about a filter
 info(Filter, Absolute) ->
