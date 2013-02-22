@@ -104,25 +104,25 @@ process_buffer(State, Buffer) ->
 %%%
 
 process_cmd(State, <<"c ", Rest/binary>>) ->
-    process_check(State, Rest);
+    process_check_set(check, State, Rest);
 process_cmd(State, <<"check ", Rest/binary>>) ->
-    process_check(State, Rest);
+    process_check_set(check, State, Rest);
 
 process_cmd(State, <<"m ", Rest/binary>>) ->
-    process_multi(State, Rest);
+    process_multi_bulk(multi, State, Rest);
 process_cmd(State, <<"multi ", Rest/binary>>) ->
-    process_multi(State, Rest);
+    process_multi_bulk(multi, State, Rest);
 
 
 process_cmd(State, <<"s ", Rest/binary>>) ->
-    process_set(State, Rest);
+    process_check_set(set, State, Rest);
 process_cmd(State, <<"set ", Rest/binary>>) ->
-    process_set(State, Rest);
+    process_check_set(set, State, Rest);
 
 process_cmd(State, <<"b ", Rest/binary>>) ->
-    process_bulk(State, Rest);
+    process_multi_bulk(bulk, State, Rest);
 process_cmd(State, <<"bulk ", Rest/binary>>) ->
-    process_bulk(State, Rest);
+    process_multi_bulk(bulk, State, Rest);
 
 process_cmd(State, <<"info ", Rest/binary>>) ->
     % Get the filter and if absolute mode is one
@@ -361,34 +361,49 @@ process_cmd(State=#state{socket=Sock}, Cmd) ->
 % supports aliasing
 %%%
 
-process_check(State, Rest) ->
+process_check_set(Op, State, Rest) ->
     filter_key_needed(fun(Filter, [Key]) ->
-        _Result = bloomd_ring:check(Filter, Key),
-        % TODO: handle response
+        Result = bloomd_ring:Op(Filter, Key),
+        case Result of
+            {ok, false} ->
+                gen_tcp:send(State#state.socket, [?NO_RESP]);
+            {ok, true} ->
+                gen_tcp:send(State#state.socket, [?YES_RESP]);
+            {error, no_filter} ->
+                gen_tcp:send(State#state.socket, [?FILT_NOT_EXIST]);
+            {error, _} ->
+                gen_tcp:send(State#state.socket, [?INTERNAL_ERR])
+        end,
         State
     end, Rest, State).
 
 
-process_multi(State, Rest) ->
+process_multi_bulk(Op, State, Rest) ->
     filter_keys_needed(fun(Filter, Keys) ->
-        _Result = bloomd_ring:multi(Filter, Keys),
-        % TODO: handle response
-        State
-    end, Rest, State).
-
-
-process_set(State, Rest) ->
-    filter_key_needed(fun(Filter, [Key]) ->
-        _Result = bloomd_ring:set(Filter, Key),
-        % TODO: handle response
-        State
-    end, Rest, State).
-
-
-process_bulk(State, Rest) ->
-    filter_keys_needed(fun(Filter, Keys) ->
-        _Result = bloomd_ring:bulk(Filter, Keys),
-        % TODO: handle response
+        Result = bloomd_ring:Op(Filter, Keys),
+        case Result of
+            {ok, Vals} ->
+                Formatted = lists:foldl(fun(V, {Resp, Idx}) ->
+                    Res = case Idx of
+                        0 ->
+                            case V of
+                                true -> ?YES_RESP;
+                                _ -> ?NO_RESP
+                            end;
+                        _ ->
+                            case V of
+                                true -> ?YES_SPACE;
+                                _ -> ?NO_SPACE
+                            end
+                    end,
+                    {[Res | Resp], Idx+1}
+                end, {[], 0}, lists:reverse(Vals)),
+                gen_tcp:send(State#state.socket, [Formatted]);
+            {error, no_filter} ->
+                gen_tcp:send(State#state.socket, [?FILT_NOT_EXIST]);
+            {error, _} ->
+                gen_tcp:send(State#state.socket, [?INTERNAL_ERR])
+        end,
         State
     end, Rest, State).
 
