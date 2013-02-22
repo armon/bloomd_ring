@@ -47,7 +47,7 @@ start_link(ReqId, From, Op, Args) ->
 
 start_op(Op, Args) ->
     ReqId = erlang:make_ref(),
-    {ok, _} = br_cluster_fsm_sup:start_fsm([ReqId, self(), Op, Args]),
+    {ok, _} = br_quorum_fsm_sup:start_fsm([ReqId, self(), Op, Args]),
     {ok, ReqId}.
 
 
