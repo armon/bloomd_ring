@@ -89,7 +89,8 @@ prepare(timeout, State=#state{args={FilterName, Key}}) ->
 
     % Get the preflist
     DocIdx = riak_core_util:chash_key({FilterName, Slice}),
-    Preflist = riak_core_apl:get_primary_apl(DocIdx, ?N, bloomd),
+    Preflist2 = riak_core_apl:get_primary_apl(DocIdx, ?N, bloomd),
+    Preflist = [Idx || {Idx, _type} <- Preflist2],
 
     % Proceed wiht preflist and slice
     {next_state, executing, State#state{preflist=Preflist, slice=Slice}, 0}.
