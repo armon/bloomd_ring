@@ -190,9 +190,19 @@ check(Filter, Key) ->
     lager:info("Check called on: ~p for: ~p", [Filter, Key]),
     ok.
 
+%% @doc Checks for multiple keys in a filter
+multi(Filter, Keys) ->
+    lager:info("Multi called on: ~p for: ~p", [Filter, Keys]),
+    ok.
+
 %% @doc Sets a key in a filter
 set(Filter, Key) ->
     lager:info("Set called on: ~p for: ~p", [Filter, Key]),
+    ok.
+
+%% @doc Sets multiple keys in a filter
+bulk(Filter, Keys) ->
+    lager:info("Bulk called on: ~p for: ~p", [Filter, Keys]),
     ok.
 
 %% @doc Gets information about a filter
