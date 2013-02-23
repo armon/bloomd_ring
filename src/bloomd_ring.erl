@@ -10,6 +10,10 @@
 -define(LONG_WAIT, 60000).
 -define(EXTREME_WAIT, 300000).
 
+% This is the minimum partition size after we divide.
+% If a partition is too small, it will scale poorly
+-define(MIN_PARTITION_SIZE, 16384).
+
 %% Public API
 
 %% @doc Pings a random vnode to make sure communication is functional
@@ -38,7 +42,7 @@ create(Filter, OptionsList) ->
         Capacity ->
             {ok, Ring} = riak_core_ring_manager:get_my_ring(),
             Partitions = riak_core_ring:num_partitions(Ring),
-            NewCap = br_util:ceiling(Capacity / Partitions),
+            NewCap = max(br_util:ceiling(Capacity / Partitions), ?MIN_PARTITION_SIZE),
             lists:keyreplace(capacity, 1, Opt1, {capacity, NewCap})
     end,
 
