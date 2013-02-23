@@ -196,7 +196,8 @@ clear(Filter) ->
 
 %% @doc Checks for a key in a filter
 check(Filter, Key) ->
-    lager:info("Check called on: ~p for: ~p", [Filter, Key]),
+    % DEBUG
+    %lager:info("Check called on: ~p for: ~p", [Filter, Key]),
 
     % Start a quorum FSM to send out the command
     {ok, ReqId} = br_quorum_fsm:start_op(check, {Filter, Key}),
@@ -228,7 +229,8 @@ multi(Filter, Keys) ->
 
 %% @doc Sets a key in a filter
 set(Filter, Key) ->
-    lager:info("Set called on: ~p for: ~p", [Filter, Key]),
+    % DEBUG
+    %lager:info("Set called on: ~p for: ~p", [Filter, Key]),
 
     % Start a quorum FSM to send out the command
     {ok, ReqId} = br_quorum_fsm:start_op(set, {Filter, Key}),
