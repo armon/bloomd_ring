@@ -44,8 +44,8 @@ init([Partition]) ->
     {ok, LocalHost} = application:get_env(bloomd_ring, bloomd_local_host),
     {ok, LocalPort} = application:get_env(bloomd_ring, bloomd_local_port),
 
-    % Try to connect to the local bloomd
-    Conn = bloomd:new(LocalHost, LocalPort),
+    % Try to connect to the local bloomd without key hashing enabled
+    Conn = bloomd:new(LocalHost, LocalPort, false),
 
     % Setup our state
     {ok, #state {partition=Partition, conn=Conn}}.
