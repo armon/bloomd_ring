@@ -142,7 +142,13 @@ handle_command({create_filter, FilterName, Options}, _Sender, State) ->
             AllExist = lists:all(fun(exists) -> true; (_) -> false end, Results),
             case AllExist of
                 true -> exists;
-                _ -> done
+                _ ->
+                    AllClient = lists:all(fun({error, {client_error, _}}) -> true;
+                                (_) -> false end, Results),
+                    case AllClient of
+                        true -> [Err|_] = Results, Err;
+                        _ -> done
+                    end
             end
     end,
 

@@ -62,8 +62,13 @@ create(Filter, OptionsList) ->
                 _ -> case lists:all(fun(R) -> R =:= done orelse R =:= exists end, Results) of
                         true -> {ok, done};
                         _ ->
-                            lager:warning("Nodes did not agree on create of ~p. Responses: ~p", [Filter, Results]),
-                            {error, internal_error}
+                            % Check for a client error
+                            case lists:all(fun({error, {client_error, _}}) -> true; (_) -> false end, Results) of
+                                true -> [Err|_] = Results, Err;
+                                _ ->
+                                    lager:warning("Nodes did not agree on create of ~p. Responses: ~p", [Filter, Results]),
+                                    {error, internal_error}
+                            end
                     end
             end
     end.

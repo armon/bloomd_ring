@@ -243,6 +243,9 @@ process_cmd(State, <<"create ", Rest/binary>>) ->
                                     gen_tcp:send(State#state.socket, [?EXISTS]);
                                 {ok, done} ->
                                     gen_tcp:send(State#state.socket, [?DONE]);
+                                {error, {client_error, Err}} ->
+                                    gen_tcp:send(State#state.socket,
+                                                 [?CLIENT_ERR, Err, ?NEWLINE]);
                                 {error, _} ->
                                     gen_tcp:send(State#state.socket, [?INTERNAL_ERR])
                             end
