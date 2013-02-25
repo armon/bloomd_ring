@@ -386,7 +386,7 @@ process_multi_bulk(Op, State, Rest) ->
         Result = bloomd_ring:Op(Filter, Keys),
         case Result of
             {ok, Vals} ->
-                Formatted = lists:foldl(fun(V, {Resp, Idx}) ->
+                {Formatted, _} = lists:foldl(fun(V, {Resp, Idx}) ->
                     Res = case Idx of
                         0 ->
                             case V of

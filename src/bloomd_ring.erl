@@ -5,6 +5,9 @@
 -export([ping/0, create/2, list/1, drop/1, close/1, clear/1,
         check/2, multi/2, set/2, bulk/2, info/2, flush/1]).
 
+% Only for pmap
+-export([pmap_cmd/3]).
+
 -define(SHORT_WAIT, 15000).
 -define(DEFAULT_TIMEOUT, 30000).
 -define(LONG_WAIT, 60000).
@@ -224,7 +227,19 @@ check(Filter, Key) ->
 %% @doc Checks for multiple keys in a filter
 multi(Filter, Keys) ->
     lager:info("Multi called on: ~p for: ~p", [Filter, Keys]),
-    ok.
+
+    % Execute all the checks in parallel
+    Results = rpc:pmap({bloomd_ring, pmap_cmd}, [check, [Filter]], Keys),
+
+    % Return the first error result if any
+    {Errs, Resp} = lists:partition(fun({error, _}) -> true; (_) -> false end, Results),
+    case Errs of
+        [Err|_] -> Err;
+        [] ->
+            % Repackage the okay results
+            KeyChecks = [C || {ok, C} <- Resp],
+            {ok, KeyChecks}
+    end.
 
 
 %% @doc Sets a key in a filter
@@ -257,7 +272,19 @@ set(Filter, Key) ->
 %% @doc Sets multiple keys in a filter
 bulk(Filter, Keys) ->
     lager:info("Bulk called on: ~p for: ~p", [Filter, Keys]),
-    ok.
+
+    % Execute all the sets in parallel
+    Results = rpc:pmap({bloomd_ring, pmap_cmd}, [set, [Filter]], Keys),
+
+    % Return the first error result if any
+    {Errs, Resp} = lists:partition(fun({error, _}) -> true; (_) -> false end, Results),
+    case Errs of
+        [Err|_] -> Err;
+        [] ->
+            % Repackage the okay results
+            KeyChecks = [C || {ok, C} <- Resp],
+            {ok, KeyChecks}
+    end.
 
 
 %% @doc Gets information about a filter
@@ -340,4 +367,9 @@ wait_for_req(ReqId, Timeout) ->
     after Timeout ->
         {error, timeout}
     end.
+
+% Helper method to be used with pmap. Moves the first
+% argument to the end of the argument array.
+pmap_cmd(Key, Op, Args) ->
+    apply(bloomd_ring, Op, Args ++ [Key]).
 
