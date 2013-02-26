@@ -1,4 +1,4 @@
-bloomd\_ring: A Riak Core Application for Bloomd
+bloomd\_ring: A Riak Core Application for Bloomd [![Build Status](https://travis-ci.org/armon/bloomd_ring.png)](https://travis-ci.org/armon/bloomd_ring)
 ======================================
 
 bloomd_riak is a Riak core application that provides an interface which is compatible
