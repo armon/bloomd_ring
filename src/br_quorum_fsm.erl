@@ -153,8 +153,33 @@ waiting(Resp, State=#state{preflist=Pref, resp=Buf, from=From, req_id=ReqId}) ->
 
 
 % Handles doing a read-repair after we've responded to the client
-repairing(timeout, State) ->
-    % TODO: Read repair...
+repairing(timeout, State=#state{resp=Resps, op=Op, args={Filter, Key}}) ->
+    % Count all the responses
+    Counted = response_counts(Resps),
+    case Counted of
+        % We don't do anything if all nodes agree
+        [_Agreed] -> ok;
+
+        % If we are doing a `check` and 2 nodes belive
+        % a key exists, perform a set to repair the 3rd node.
+        % Since bloomd cannot 'unset' there is no way to repair
+        % a 2 No / 1 Yes situation
+        [{2, {ok, true}}, {1, {ok, false}}] when Op =:= check ->
+            bloomd_ring:set(Filter, Key);
+
+        % If one of the nodes belives that the filter exists
+        % then maybe a drop is needed
+        [{2, {error, no_filter}}, {1, {ok, _}}] ->
+            br_repair:maybe_drop(Filter);
+
+        % If one of the nodes belive that the filter does not
+        % exist, then maybe a create is needed
+        [{2, {ok, _}}, {1, {error, no_filter}}] ->
+            br_repair:maybe_create(Filter);
+
+        % If we don't match any condition, do nothing
+        _ -> ok
+    end,
     {stop, normal, State};
 
 % Handle a straggling message
