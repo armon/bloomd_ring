@@ -39,6 +39,11 @@ init(_Args) ->
                   {riak_core_vnode_master, start_link, [br_vnode]},
                   permanent, 5000, worker, [riak_core_vnode_master]},
 
+    % Repair server
+    Repair = {br_repair,
+                  {br_repair, start_link, []},
+                    permanent, 5000, worker, [br_repair]},
+
     % FSM Managers
     ClusterFSM = {br_cluster_fsm_sup,
                   {br_cluster_fsm_sup, start_link, []},
@@ -54,6 +59,6 @@ init(_Args) ->
 
     { ok,
         { {one_for_one, 5, 10},
-          [ConnManager, AcceptManager, VMaster,
+          [ConnManager, AcceptManager, VMaster, Repair,
            ClusterFSM, CoverageFSM, QuorumFSM]}}.
 
