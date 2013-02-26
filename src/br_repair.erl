@@ -130,6 +130,9 @@ check_repair(Filter) ->
     % List the slice info
     List = list_slices(Filter),
 
+    % Get the expected number of partitions
+    P = br_util:num_partitions(),
+
     % Count the number of slices
     case count_slices(List) of
         {error, timeout} ->
@@ -137,17 +140,22 @@ check_repair(Filter) ->
 
         % If more than half believe the filter does not exist but
         % some do believe it exists, we issue a drop
-        #counter{exist=E, not_exist=NE} when NE > E, E > 0 ->
+        #counter{exist=E, not_exist=NE} when NE > (P / 2), E > 0 ->
             lager:notice("Issuing drop as part of read repair for ~p!", [Filter]),
             bloomd_ring:drop(Filter);
 
         % The complement is that if more than half think it exists,
         % but some do not believe it exists, we issue a create
-        #counter{exist=E, not_exist=NE} when E > NE, NE > 0 ->
+        #counter{exist=E, not_exist=NE} when E > (P / 2), NE > 0 ->
             Options = get_create_options(List),
             lager:notice("Issuing create as part of read repair for ~p with options ~p!",
                          [Filter, Options]),
             bloomd_ring:create(Filter, Options);
+
+        % Log if there are slices that both exist and don't exist,
+        % but not enough to come to a consensus decision
+        #counter{exist=E, not_exist=NE} when E > 0, NE > 0 ->
+            lager:warning("Not sure how to read repair filter ~p. Votes: Exist: ~p, Not Exist: ~p", [Filter, E, NE]);
 
         _ -> ok
     end.
