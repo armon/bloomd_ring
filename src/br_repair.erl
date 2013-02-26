@@ -147,7 +147,7 @@ check_repair(Filter) ->
         % The complement is that if more than half think it exists,
         % but some do not believe it exists, we issue a create
         #counter{exist=E, not_exist=NE} when E > (P / 2), NE > 0 ->
-            Options = get_create_options(List),
+            Options = create_options(List),
             lager:notice("Issuing create as part of read repair for ~p with options ~p!",
                          [Filter, Options]),
             bloomd_ring:create(Filter, Options);
@@ -188,9 +188,10 @@ count_slices(List) ->
 
 % Uses the results of list_slices to re-create the
 % settings required for issuing a filter create
-get_create_options(List) ->
+create_options(List) ->
     % Get the first okay response
-    [{_Slice, Info} |_More] = [Info || {Type, Info} <- List, Type =:= ok],
+    [First|_] = lists:filter(fun({ok,_}) -> true; (_) -> false end, List),
+    {ok, [{_Slice, Info}|_]} = First,
 
     % Get the probability and capacity
     {probability, Prob} = lists:keyfind(probability, 1, Info),
@@ -201,4 +202,25 @@ get_create_options(List) ->
 
     % Return the filter capacity and probability
     [{capacity, Capacity}, {probability, Prob}].
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+create_options_test() ->
+    % Mock the call to br_util:num_partitions
+    M = em:new(),
+    em:strict(M, br_util, num_partitions, [], {return, 64}),
+    ok = em:replay(M),
+
+    Inp = [{error, no_filter}, {ok, [{1, [{tubez, 100},
+                                     {probability, 0.001},
+                                     {checks, 100},
+                                          {capacity, 10000}]}]}],
+    Res = create_options(Inp),
+    Expect = [{capacity, 640000}, {probability, 0.001}],
+
+    em:verify(M),
+    ?assertEqual(Expect, Res).
+
+-endif.
 
