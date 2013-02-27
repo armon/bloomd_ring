@@ -222,5 +222,11 @@ create_options_test() ->
     em:verify(M),
     ?assertEqual(Expect, Res).
 
+count_slices_test() ->
+    Inp = [{ok, []}, {error, no_filter}, {error, command_failed}, {ok, []}],
+    Out = count_slices(Inp),
+    Expect = #counter{exist=2, not_exist=1},
+    ?assertEqual(Expect, Out).
+
 -endif.
 
