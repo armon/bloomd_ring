@@ -113,7 +113,7 @@ maybe_repair(Filter) ->
     % Check if we should execute the repair
     DoRepair = gen_server:call(?MODULE, {should_repair, Filter, self()}),
     case DoRepair of
-        true -> check_repair(Filter);
+        true -> check_repair(Filter, ?GRACE_INTERVAL);
         _ -> ok
     end.
 
@@ -123,9 +123,9 @@ maybe_repair(Filter) ->
 %%%
 
 % Checks if a repair is necessary
-check_repair(Filter) ->
+check_repair(Filter, Grace) ->
     % Wait for a grace period
-    timer:sleep(?GRACE_INTERVAL),
+    timer:sleep(Grace),
 
     % List the slice info
     List = list_slices(Filter),
@@ -136,13 +136,14 @@ check_repair(Filter) ->
     % Count the number of slices
     case count_slices(List) of
         {error, timeout} ->
-            lager:warning("Failed to perform cluster info on ~p for read repair!", [Filter]);
+            lager:warning("Failed to perform cluster info on ~p for read repair!", [Filter]), {error, timeout};
+
 
         % If more than half believe the filter does not exist but
         % some do believe it exists, we issue a drop
         #counter{exist=E, not_exist=NE} when NE > (P / 2), E > 0 ->
             lager:notice("Issuing drop as part of read repair for ~p!", [Filter]),
-            bloomd_ring:drop(Filter);
+            bloomd_ring:drop(Filter), {repair, drop};
 
         % The complement is that if more than half think it exists,
         % but some do not believe it exists, we issue a create
@@ -150,24 +151,27 @@ check_repair(Filter) ->
             Options = create_options(List),
             lager:notice("Issuing create as part of read repair for ~p with options ~p!",
                          [Filter, Options]),
-            bloomd_ring:create(Filter, Options);
+            bloomd_ring:create(Filter, Options),
+            {repair, create};
 
         % Log if there are slices that both exist and don't exist,
         % but not enough to come to a consensus decision
         #counter{exist=E, not_exist=NE} when E > 0, NE > 0 ->
-            lager:warning("Not sure how to read repair filter ~p. Votes: Exist: ~p, Not Exist: ~p", [Filter, E, NE]);
+            lager:warning("Not sure how to read repair filter ~p. Votes: Exist: ~p, Not Exist: ~p", [Filter, E, NE]),
+            {repair, unknown};
 
         _ -> ok
     end.
 
 
 % Lists the slices using a full cluster FSM
-list_slices(Filter) ->
+list_slices(Filter) -> list_slices(Filter, ?LIST_TIMEOUT).
+list_slices(Filter, Timeout) ->
     % Start a full cluster list operation
     {ok, ReqId} = br_cluster_fsm:start_op(info, Filter),
     receive
         {ReqId, Resp} -> Resp
-    after ?LIST_TIMEOUT ->
+    after Timeout ->
         {error, timeout}
     end.
 
@@ -227,6 +231,121 @@ count_slices_test() ->
     Out = count_slices(Inp),
     Expect = #counter{exist=2, not_exist=1},
     ?assertEqual(Expect, Out).
+
+count_slices_error_test() ->
+    Out = count_slices({error, timeout}),
+    ?assertEqual({error, timeout}, Out).
+
+list_slices_timeout_test() ->
+    % Mock the call to br_util:num_partitions
+    M = em:new(),
+    em:strict(M, br_cluster_fsm, start_op, [info, <<"tubez">>], {return, {ok, 1}}),
+    ok = em:replay(M),
+
+    {error,timeout} = list_slices(<<"tubez">>, 0),
+    em:verify(M).
+
+list_slices_recv_test() ->
+    % Spawn a helper
+    ReqId = 1,
+    P = self(),
+    spawn(fun() ->
+        P ! {ReqId, {ok, tubez}}
+    end),
+
+    % Mock the call to br_util:num_partitions
+    M = em:new(),
+    em:strict(M, br_cluster_fsm, start_op, [info, <<"tubez">>],
+              {return, {ok, ReqId}}),
+    ok = em:replay(M),
+
+    {ok, tubez} = list_slices(<<"tubez">>),
+    em:verify(M).
+
+check_repair_unknown_test() ->
+    % Spawn a helper
+    ReqId = 1,
+    P = self(),
+    spawn(fun() -> P ! {ReqId, [{ok, tubez}, {error, no_filter}]} end),
+
+    % Mock the call to br_util:num_partitions
+    M = em:new(),
+    em:strict(M, br_cluster_fsm, start_op, [info, <<"tubez">>],
+              {return, {ok, ReqId}}),
+    em:strict(M, br_util, num_partitions, [], {return, 2}),
+    ok = em:replay(M),
+    ?assertEqual({repair, unknown}, check_repair(<<"tubez">>, 0)),
+    em:verify(M).
+
+check_repair_drop_test() ->
+    % Spawn a helper
+    ReqId = 1,
+    P = self(),
+    spawn(fun() -> P ! {ReqId, [{ok, tubez}, {error, no_filter}, {error, no_filter}]} end),
+
+    % Mock the call to br_util:num_partitions
+    M = em:new(),
+    em:strict(M, br_cluster_fsm, start_op, [info, <<"tubez">>],
+              {return, {ok, ReqId}}),
+    em:strict(M, br_util, num_partitions, [], {return, 3}),
+    em:strict(M, bloomd_ring, drop, [<<"tubez">>], {return, ok}),
+    ok = em:replay(M),
+
+    ?assertEqual({repair, drop}, check_repair(<<"tubez">>, 0)),
+    em:verify(M).
+
+check_repair_create_test() ->
+    % Spawn a helper
+    ReqId = 1,
+    P = self(),
+    Info = [{1, [{capacity, 1000}, {probability, 0.002}]}],
+    spawn(fun() -> P ! {ReqId, [{ok, Info}, {ok, tubez}, {error, no_filter}]} end),
+
+    % Expected filter settings
+    ExpectOpt = [{capacity, 3000}, {probability, 0.002}],
+
+    % Mock the call to br_util:num_partitions
+    M = em:new(),
+    em:strict(M, br_cluster_fsm, start_op, [info, <<"tubez">>],
+              {return, {ok, ReqId}}),
+    em:strict(M, br_util, num_partitions, [], {return, 3}),
+    em:strict(M, br_util, num_partitions, [], {return, 3}),
+    em:strict(M, bloomd_ring, create, [<<"tubez">>, ExpectOpt], {return, ok}),
+    ok = em:replay(M),
+
+    ?assertEqual({repair, create}, check_repair(<<"tubez">>, 0)),
+    em:verify(M).
+
+check_repair_valid_test() ->
+    % Spawn a helper
+    ReqId = 1,
+    P = self(),
+    spawn(fun() -> P ! {ReqId, [{ok, tubez}, {ok, tubez}, {ok, tubez}]} end),
+
+    % Mock the call to br_util:num_partitions
+    M = em:new(),
+    em:strict(M, br_cluster_fsm, start_op, [info, <<"tubez">>],
+              {return, {ok, ReqId}}),
+    em:strict(M, br_util, num_partitions, [], {return, 3}),
+    ok = em:replay(M),
+    ?assertEqual(ok, check_repair(<<"tubez">>, 0)),
+    em:verify(M).
+
+check_repair_timeout_test() ->
+    % Spawn a helper
+    ReqId = 1,
+    P = self(),
+    spawn(fun() -> P ! {ReqId, {error, timeout}} end),
+
+    % Mock the call to br_util:num_partitions
+    M = em:new(),
+    em:strict(M, br_cluster_fsm, start_op, [info, <<"tubez">>],
+              {return, {ok, ReqId}}),
+    em:strict(M, br_util, num_partitions, [], {return, 3}),
+    ok = em:replay(M),
+    ?assertEqual({error, timeout}, check_repair(<<"tubez">>, 0)),
+    em:verify(M).
+
 
 -endif.
 
