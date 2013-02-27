@@ -750,5 +750,44 @@ invalid_filter_needed_test() ->
     ?assertEqual(S, filter_needed(undefined, <<"\t">>, S)),
     em:verify(M).
 
+valid_filter_key_needed_test() ->
+    Valid = fun(<<"filter">>, [<<"key">>]) -> true end,
+    ?assertEqual(true, filter_key_needed(Valid, <<"filter key">>, false)).
+
+toomany_filter_key_needed_test() ->
+    Expect = [?CLIENT_ERR, ?UNEXPECTED_ARGS, ?NEWLINE],
+    M = em:new(),
+    em:strict(M, gen_tcp, send, [undefined, Expect], {return, ok}),
+    ok = em:replay(M),
+
+    S = #state{socket=undefined},
+    ?assertEqual(S, filter_key_needed(undefined, <<"filter key key2">>, S)),
+    em:verify(M).
+
+missing_filter_key_needed_test() ->
+    Expect = [?CLIENT_ERR, ?FILT_KEY_NEEDED, ?NEWLINE],
+    M = em:new(),
+    em:strict(M, gen_tcp, send, [undefined, Expect], {return, ok}),
+    ok = em:replay(M),
+
+    S = #state{socket=undefined},
+    ?assertEqual(S, filter_key_needed(undefined, <<"">>, S)),
+    em:verify(M).
+
+bad_filter_key_needed_test() ->
+    Expect = [?CLIENT_ERR, ?BAD_FILT_NAME, ?NEWLINE],
+    M = em:new(),
+    em:strict(M, gen_tcp, send, [undefined, Expect], {return, ok}),
+    ok = em:replay(M),
+
+    S = #state{socket=undefined},
+    ?assertEqual(S, filter_key_needed(undefined, <<"\t key">>, S)),
+    em:verify(M).
+
+valid_filter_keys_needed_test() ->
+    Valid = fun(<<"filter">>, [<<"key">>, <<"key2">>]) -> true end,
+    ?assertEqual(true, filter_keys_needed(Valid, <<"filter key key2">>, false)).
+
+
 
 -endif.
