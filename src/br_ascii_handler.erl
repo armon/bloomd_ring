@@ -28,7 +28,7 @@
 -define(NO_SPACE, <<"No ">>).
 -define(YES_RESP, <<"Yes\n">>).
 -define(NO_RESP, <<"No\n">>).
--define(VALID_FILT_RE, "^[^\s]{1,200}$").
+-define(VALID_FILT_RE, "^[^ \t\n\r]{1,200}$").
 
 
 -ifdef(TEST).
@@ -550,6 +550,13 @@ parse_create_options([Opt | Remain], Props) ->
             case Val of
                 error -> {error, badargs};
 
+                % Stop if probability is invalid
+                V when V >= 1.0 orelse V =< 0, Key =:= probability ->
+                    {error, badargs};
+
+                V when V =< 0, Key =:= capacity ->
+                    {error, badargs};
+
                 % Recursively handle the other options
                 _ -> parse_create_options(Remain, [{Key, Val} | Props])
             end;
@@ -637,5 +644,111 @@ format_float_test() ->
     ?assertEqual(["-123", ".", [], "123456"], format_float(-123.123456)),
     ?assertEqual(["123", ".", [], "123456"], format_float(123.123456)),
     ?assertEqual(["0", ".", ["0", "0"], "1000"], format_float(0.001)).
+
+send_list_test() ->
+    Expect = [<<"START\n">>, [[<<"tubez">>, <<"\n">>]], <<"END\n">>],
+    M = em:new(),
+    em:strict(M, gen_tcp, send, [undefined, Expect], {return, ok}),
+    ok = em:replay(M),
+
+    send_list(undefined, [<<"tubez">>]),
+    em:verify(M).
+
+split_non_global_test() ->
+    In = <<"test a string">>,
+    ?assertEqual([<<"test">>, <<"a string">>], split(In, ?SPACE, false)).
+
+split_global_test() ->
+    In = <<"test a string">>,
+    ?assertEqual([<<"test">>, <<"a">>, <<"string">>], split(In, ?SPACE, true)).
+
+split_drop_blank_test() ->
+    In = <<"test a          string">>,
+    ?assertEqual([<<"test">>, <<"a">>, <<"string">>], split(In, ?SPACE, true)).
+
+parse_create_invalid_test() ->
+    Inp = [<<"capacity=10000">>, <<"bad=1">>],
+    ?assertEqual({error, badargs}, parse_create_options(Inp)),
+    ?assertEqual({error, badargs}, parse_create_options([<<"foobar">>])),
+    ?assertEqual({error, badargs}, parse_create_options([<<"capacity=foo">>])),
+    ?assertEqual({error, badargs}, parse_create_options([<<"capacity=0">>])),
+    ?assertEqual({error, badargs}, parse_create_options([<<"capacity=-100">>])),
+    ?assertEqual({error, badargs}, parse_create_options([<<"probability=0">>])),
+    ?assertEqual({error, badargs}, parse_create_options([<<"probability=1">>])),
+    ?assertEqual({error, badargs}, parse_create_options([<<"probability=-0.5">>])),
+    ?assertEqual({error, badargs}, parse_create_options([<<"probability=foo">>])),
+    ?assertEqual({error, badargs}, parse_create_options([<<"prob=foo">>])),
+    ?assertEqual({error, badargs}, parse_create_options([<<"in_memory=foo">>])),
+    ?assertEqual({error, badargs}, parse_create_options([<<"in_memory=2.0">>])).
+
+parse_create_valid_test() ->
+    Inp = [<<"capacity=10000">>, <<"in_memory=0">>, <<"prob=0.001">>],
+    Out = [{probability, 0.001}, {in_memory, 0}, {capacity, 10000}],
+    ?assertEqual(Out, parse_create_options(Inp)).
+
+invalid_filter_test() ->
+    ?assertEqual(false, valid_filter(<<"">>)),
+    ?assertEqual(false, valid_filter(<<"    ">>)),
+    ?assertEqual(false, valid_filter(<<"\t">>)),
+    ?assertEqual(false, valid_filter(<<"\n">>)).
+
+valid_filter_test() ->
+    ?assertEqual(true, valid_filter(<<"a">>)),
+    ?assertEqual(true, valid_filter(<<"foo:bar:baz">>)),
+    ?assertEqual(true, valid_filter(<<"!@#$%^&*()_+-=">>)),
+    ?assertEqual(true, valid_filter(<<"Unicøde">>)).
+
+invalid_no_args_needed_test() ->
+    Expect = [?CLIENT_ERR, ?UNEXPECTED_ARGS, ?NEWLINE],
+    M = em:new(),
+    em:strict(M, gen_tcp, send, [undefined, Expect], {return, ok}),
+    ok = em:replay(M),
+
+    S = #state{socket=undefined},
+    Valid = fun() -> true end,
+    ?assertEqual(S, no_args_needed(Valid, <<"more">>, S)),
+    em:verify(M).
+
+valid_no_args_needed_test() ->
+    Valid = fun() -> true end,
+    ?assertEqual(true, no_args_needed(Valid, <<>>, false)).
+
+valid_filter_needed_test() ->
+    Valid = fun(<<"tubez">>) -> true end,
+    ?assertEqual(true, filter_needed(Valid, <<"tubez">>, false)).
+
+missing_filter_needed_test() ->
+    Expect = [?CLIENT_ERR, ?FILT_NEEDED, ?NEWLINE],
+    M = em:new(),
+    em:strict(M, gen_tcp, send, [undefined, Expect], {return, ok}),
+    ok = em:replay(M),
+
+
+    S = #state{socket=undefined},
+    ?assertEqual(S, filter_needed(undefined, <<>>, S)),
+    em:verify(M).
+
+extra_filter_needed_test() ->
+    Expect = [?CLIENT_ERR, ?UNEXPECTED_ARGS, ?NEWLINE],
+    M = em:new(),
+    em:strict(M, gen_tcp, send, [undefined, Expect], {return, ok}),
+    ok = em:replay(M),
+
+
+    S = #state{socket=undefined},
+    ?assertEqual(S, filter_needed(undefined, <<"tubez more">>, S)),
+    em:verify(M).
+
+invalid_filter_needed_test() ->
+    Expect = [?CLIENT_ERR, ?BAD_FILT_NAME, ?NEWLINE],
+    M = em:new(),
+    em:strict(M, gen_tcp, send, [undefined, Expect], {return, ok}),
+    ok = em:replay(M),
+
+
+    S = #state{socket=undefined},
+    ?assertEqual(S, filter_needed(undefined, <<"\t">>, S)),
+    em:verify(M).
+
 
 -endif.
