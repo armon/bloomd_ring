@@ -24,7 +24,7 @@ ping() ->
     DocIdx = riak_core_util:chash_key({<<"ping">>, term_to_binary(now())}),
     PrefList = riak_core_apl:get_primary_apl(DocIdx, 1, bloomd),
     [{IndexNode, _Type}] = PrefList,
-    riak_core_vnode_master:sync_spawn_command(IndexNode, ping, bloomd_vnode_master).
+    riak_core_vnode_master:sync_spawn_command(IndexNode, ping, br_vnode_master).
 
 
 %% @doc Creates a new filter with the given name and options list
