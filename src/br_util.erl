@@ -126,6 +126,41 @@ collapse_list_info(ListInfo) ->
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 
+ceiling_test() ->
+    ?assertEqual(-1, ceiling(-1.1)),
+    ?assertEqual(0, ceiling(-0.1)),
+    ?assertEqual(1, ceiling(0.1)),
+    ?assertEqual(3, ceiling(3)),
+    ?assertEqual(5, ceiling(4.1)).
+
+num_partitions_test() ->
+    % Mock the call to riak_core_ring_manager:get_my_ring
+    Ring = riak_core_ring:fresh(128, tubez),
+    M = em:new(),
+    em:strict(M, riak_core_ring_manager, get_my_ring, [], {return, {ok, Ring}}),
+    ok = em:replay(M),
+
+    ?assertEqual(128, num_partitions()),
+    em:verify(M).
+
+keyslice_1_test() ->
+    % Mock the call to riak_core_ring_manager:get_my_ring
+    Ring = riak_core_ring:fresh(64, tubez),
+    M = em:new(),
+    em:strict(M, riak_core_ring_manager, get_my_ring, [], {return, {ok, Ring}}),
+    ok = em:replay(M),
+
+    ?assertEqual(22, keyslice(<<"bar">>)),
+    em:verify(M).
+
+keyslice_2_test() ->
+    ?assertEqual(0, keyslice(<<"foo">>, 1)),
+    ?assertEqual(0, keyslice(<<"bar">>, 1)),
+    ?assertEqual(0, keyslice(<<"baz">>, 1)),
+    ?assertEqual(56, keyslice(<<"foo">>, 64)),
+    ?assertEqual(22, keyslice(<<"bar">>, 64)),
+    ?assertEqual(39, keyslice(<<"baz">>, 64)).
+
 merge_slice_info_test() ->
     Info1 = [{probability, 0.001}, {bytes, 100}, {capacity, 1000}, {size, 2000}],
     Info2 = [{probability, 0.001}, {bytes, 200}, {capacity, 2000}, {size, 3000}],
