@@ -320,8 +320,6 @@ process_cmd(State, <<"flush", Rest/binary>>) ->
         case Result of
             {ok, done} ->
                 gen_tcp:send(State#state.socket, [?DONE]);
-            {error, no_filter} ->
-                gen_tcp:send(State#state.socket, [?FILT_NOT_EXIST]);
             {error, _} ->
                 gen_tcp:send(State#state.socket, [?INTERNAL_ERR])
         end,
@@ -401,7 +399,7 @@ process_multi_bulk(Op, State, Rest) ->
                     end,
                     {[Res | Resp], Idx+1}
                 end, {[], 0}, lists:reverse(Vals)),
-                gen_tcp:send(State#state.socket, [Formatted]);
+                gen_tcp:send(State#state.socket, Formatted);
             {error, no_filter} ->
                 gen_tcp:send(State#state.socket, [?FILT_NOT_EXIST]);
             {error, _} ->
@@ -788,6 +786,289 @@ valid_filter_keys_needed_test() ->
     Valid = fun(<<"filter">>, [<<"key">>, <<"key2">>]) -> true end,
     ?assertEqual(true, filter_keys_needed(Valid, <<"filter key key2">>, false)).
 
+valid_process_multi_bulk_test() ->
+    Expect = [?YES_SPACE, ?NO_SPACE, ?YES_RESP],
+    M = em:new(),
+    em:strict(M, bloomd_ring, multi, [<<"F">>, [<<"A">>, <<"B">>, <<"C">>]],
+                            {return, {ok, [true, false, true]}}),
+    em:strict(M, gen_tcp, send, [undefined, Expect], {return, ok}),
+    ok = em:replay(M),
 
+
+    S = #state{socket=undefined},
+    ?assertEqual(S, process_multi_bulk(multi, S, <<"F A B C">>)),
+    em:verify(M).
+
+single_process_multi_bulk_test() ->
+    Expect = [?NO_RESP],
+    M = em:new(),
+    em:strict(M, bloomd_ring, bulk, [<<"F">>, [<<"A">>]],
+                            {return, {ok, [false]}}),
+    em:strict(M, gen_tcp, send, [undefined, Expect], {return, ok}),
+    ok = em:replay(M),
+
+
+    S = #state{socket=undefined},
+    ?assertEqual(S, process_multi_bulk(bulk, S, <<"F A">>)),
+    em:verify(M).
+
+nofilt_process_multi_bulk_test() ->
+    Expect = [?FILT_NOT_EXIST],
+    M = em:new(),
+    em:strict(M, bloomd_ring, bulk, [<<"F">>, [<<"A">>]],
+                            {return, {error, no_filter}}),
+    em:strict(M, gen_tcp, send, [undefined, Expect], {return, ok}),
+    ok = em:replay(M),
+
+    S = #state{socket=undefined},
+    ?assertEqual(S, process_multi_bulk(bulk, S, <<"F A">>)),
+    em:verify(M).
+
+failed_process_multi_bulk_test() ->
+    Expect = [?INTERNAL_ERR],
+    M = em:new(),
+    em:strict(M, bloomd_ring, bulk, [<<"F">>, [<<"A">>]],
+                            {return, {error, timeout}}),
+    em:strict(M, gen_tcp, send, [undefined, Expect], {return, ok}),
+    ok = em:replay(M),
+
+    S = #state{socket=undefined},
+    ?assertEqual(S, process_multi_bulk(bulk, S, <<"F A">>)),
+    em:verify(M).
+
+valid_process_check_set_test() ->
+    Expect = [?NO_RESP],
+    M = em:new(),
+    em:strict(M, bloomd_ring, set, [<<"F">>, <<"A">>],
+                            {return, {ok, false}}),
+    em:strict(M, gen_tcp, send, [undefined, Expect], {return, ok}),
+    ok = em:replay(M),
+
+
+    S = #state{socket=undefined},
+    ?assertEqual(S, process_check_set(set, S, <<"F A">>)),
+    em:verify(M).
+
+yes_valid_process_check_set_test() ->
+    Expect = [?YES_RESP],
+    M = em:new(),
+    em:strict(M, bloomd_ring, set, [<<"F">>, <<"A">>],
+                            {return, {ok, true}}),
+    em:strict(M, gen_tcp, send, [undefined, Expect], {return, ok}),
+    ok = em:replay(M),
+
+
+    S = #state{socket=undefined},
+    ?assertEqual(S, process_check_set(set, S, <<"F A">>)),
+    em:verify(M).
+
+nofilt_process_check_set_test() ->
+    Expect = [?FILT_NOT_EXIST],
+    M = em:new(),
+    em:strict(M, bloomd_ring, check, [<<"F">>, <<"A">>],
+                            {return, {error, no_filter}}),
+    em:strict(M, gen_tcp, send, [undefined, Expect], {return, ok}),
+    ok = em:replay(M),
+
+    S = #state{socket=undefined},
+    ?assertEqual(S, process_check_set(check, S, <<"F A">>)),
+    em:verify(M).
+
+failed_process_check_set_test() ->
+    Expect = [?INTERNAL_ERR],
+    M = em:new(),
+    em:strict(M, bloomd_ring, set, [<<"F">>, <<"A">>],
+                            {return, {error, timeout}}),
+    em:strict(M, gen_tcp, send, [undefined, Expect], {return, ok}),
+    ok = em:replay(M),
+
+    S = #state{socket=undefined},
+    ?assertEqual(S, process_check_set(set, S, <<"F A">>)),
+    em:verify(M).
+
+invalid_process_cmd_test() ->
+    NotSupExpect = [?CLIENT_ERR, ?CMD_NOT_SUP, ?NEWLINE],
+    FiltExp = [?CLIENT_ERR, ?FILT_NEEDED, ?NEWLINE],
+    FiltKeyExp = [?CLIENT_ERR, ?FILT_KEY_NEEDED, ?NEWLINE],
+    M = em:new(),
+    em:strict(M, gen_tcp, send, [undefined, FiltKeyExp]),
+    em:strict(M, gen_tcp, send, [undefined, FiltKeyExp]),
+    em:strict(M, gen_tcp, send, [undefined, FiltKeyExp]),
+    em:strict(M, gen_tcp, send, [undefined, FiltKeyExp]),
+    em:strict(M, gen_tcp, send, [undefined, FiltKeyExp]),
+    em:strict(M, gen_tcp, send, [undefined, FiltKeyExp]),
+    em:strict(M, gen_tcp, send, [undefined, FiltKeyExp]),
+    em:strict(M, gen_tcp, send, [undefined, FiltKeyExp]),
+
+    em:strict(M, gen_tcp, send, [undefined, FiltExp]),
+    em:strict(M, gen_tcp, send, [undefined, FiltExp]),
+    em:strict(M, gen_tcp, send, [undefined, FiltExp]),
+    em:strict(M, gen_tcp, send, [undefined, FiltExp]),
+    em:strict(M, gen_tcp, send, [undefined, FiltExp]),
+
+    em:strict(M, gen_tcp, send, [undefined, NotSupExpect]),
+    ok = em:replay(M),
+    S = #state{socket=undefined},
+
+    ?assertEqual(S, process_cmd(S, <<"c">>)),
+    ?assertEqual(S, process_cmd(S, <<"check">>)),
+    ?assertEqual(S, process_cmd(S, <<"m">>)),
+    ?assertEqual(S, process_cmd(S, <<"multi">>)),
+    ?assertEqual(S, process_cmd(S, <<"s">>)),
+    ?assertEqual(S, process_cmd(S, <<"set">>)),
+    ?assertEqual(S, process_cmd(S, <<"b">>)),
+    ?assertEqual(S, process_cmd(S, <<"bulk">>)),
+
+    ?assertEqual(S, process_cmd(S, <<"info">>)),
+    ?assertEqual(S, process_cmd(S, <<"drop">>)),
+    ?assertEqual(S, process_cmd(S, <<"close">>)),
+    ?assertEqual(S, process_cmd(S, <<"clear">>)),
+    ?assertEqual(S, process_cmd(S, <<"create">>)),
+
+    ?assertEqual(S, process_cmd(S, <<"tubez">>)),
+    em:verify(M).
+
+flush_all_test() ->
+    cmd_test(flush, [undefined], {ok, done},
+             <<"flush">>, [?DONE]).
+
+flush_all_timeout_test() ->
+    cmd_test(flush, [undefined], {error, timeout},
+             <<"flush">>, [?INTERNAL_ERR]).
+
+flush_filt_test() ->
+    cmd_test(flush, [<<"foo">>], {ok, done},
+             <<"flush foo">>, [?DONE]).
+
+flush_filt_missing_test() ->
+    cmd_test(flush, [<<"foo">>], {error, no_filter},
+             <<"flush foo">>, [?FILT_NOT_EXIST]).
+
+flush_filt_timeout_test() ->
+    cmd_test(flush, [<<"foo">>], {error, timeout},
+             <<"flush foo">>, [?INTERNAL_ERR]).
+
+list_test() ->
+    List = [{<<"tubez">>, [{probability, 0.001},
+                           {bytes, 100},
+                           {capacity, 1000},
+                          {size, 10}]}],
+    Out = [?START,
+           [[[<<"tubez">>, ?SPACE,
+              ["0",".",["0","0"],"1000"], ?SPACE,
+              "100", ?SPACE,
+              "1000", ?SPACE,
+              "10"], <<"\n">>]],
+    ?END],
+    cmd_test(list, [false], {ok, List},
+             <<"list">>, Out).
+
+
+list_abs_test() ->
+    List = [{<<"tubez">>, [{probability, 0.001},
+                           {bytes, 100},
+                           {capacity, 1000},
+                          {size, 10}]}],
+    Out = [?START,
+           [[[<<"tubez">>, ?SPACE,
+              ["0",".",["0","0"],"1000"], ?SPACE,
+              "100", ?SPACE,
+              "1000", ?SPACE,
+              "10"], <<"\n">>]],
+    ?END],
+    cmd_test(list, [true], {ok, List},
+             <<"list +absolute">>, Out).
+
+list_unexp_test() ->
+    cmd_test(undefined, [], [],
+             <<"list +foo">>, [?CLIENT_ERR, ?UNEXPECTED_ARGS, ?NEWLINE]).
+
+list_error_test() ->
+    cmd_test(list, [false], {error, timeout},
+             <<"list">>, [?INTERNAL_ERR]).
+
+create_no_filter_test() ->
+    cmd_test(undefined, [], [],
+             <<"create ">>, [?CLIENT_ERR, ?FILT_NEEDED, ?NEWLINE]).
+
+create_bad_filter_test() ->
+    cmd_test(undefined, [], [],
+             <<"create \t">>, [?CLIENT_ERR, ?BAD_FILT_NAME, ?NEWLINE]).
+
+create_bad_args_test() ->
+    cmd_test(undefined, [], [],
+             <<"create foo tubez=1">>, [?CLIENT_ERR, ?BAD_ARGS, ?NEWLINE]).
+
+create_exists_test() ->
+    cmd_test(create, [<<"foo">>, [{capacity, 10}]], {ok, exists},
+             <<"create foo capacity=10">>, [?EXISTS]).
+
+create_done_test() ->
+    cmd_test(create, [<<"foo">>, [{capacity, 10}]], {ok, done},
+             <<"create foo capacity=10">>, [?DONE]).
+
+create_error_test() ->
+    cmd_test(create, [<<"foo">>, [{capacity, 10}]], {error, timeout},
+             <<"create foo capacity=10">>, [?INTERNAL_ERR]).
+
+create_client_error_test() ->
+    cmd_test(create, [<<"foo">>, [{capacity, 10}]], {error, {client_error, <<"tubez">>}},
+             <<"create foo capacity=10">>, [?CLIENT_ERR, <<"tubez">>, ?NEWLINE]).
+
+clear_done_test() ->
+    cmd_test(clear, [<<"foo">>], {ok, done},
+             <<"clear foo">>, [?DONE]).
+
+clear_error_test() ->
+    cmd_test(clear, [<<"foo">>], {error, timeout},
+             <<"clear foo">>, [?INTERNAL_ERR]).
+
+clear_no_filt_test() ->
+    cmd_test(clear, [<<"foo">>], {error, no_filter},
+             <<"clear foo">>, [?FILT_NOT_EXIST]).
+
+clear_not_proxied_test() ->
+    cmd_test(clear, [<<"foo">>], {error, not_proxied},
+             <<"clear foo">>, [?FILT_NOT_PROXIED]).
+
+close_done_test() ->
+    cmd_test(close, [<<"foo">>], {ok, done},
+             <<"close foo">>, [?DONE]).
+
+close_error_test() ->
+    cmd_test(close, [<<"foo">>], {error, timeout},
+             <<"close foo">>, [?INTERNAL_ERR]).
+
+close_no_filt_test() ->
+    cmd_test(close, [<<"foo">>], {error, no_filter},
+             <<"close foo">>, [?FILT_NOT_EXIST]).
+
+drop_done_test() ->
+    cmd_test(drop, [<<"foo">>], {ok, done},
+             <<"drop foo">>, [?DONE]).
+
+drop_error_test() ->
+    cmd_test(drop, [<<"foo">>], {error, timeout},
+             <<"drop foo">>, [?INTERNAL_ERR]).
+
+drop_no_filt_test() ->
+    cmd_test(drop, [<<"foo">>], {error, no_filter},
+             <<"drop foo">>, [?FILT_NOT_EXIST]).
+
+
+
+cmd_test(Cmd, Input, Output, Buffer, Write) ->
+    M = em:new(),
+    case Cmd of
+        undefined -> ok;
+        _ ->
+            em:strict(M, bloomd_ring, Cmd, Input,
+                            {return, Output})
+    end,
+    em:strict(M, gen_tcp, send, [undefined, Write]),
+    ok = em:replay(M),
+    S = #state{socket=undefined},
+    ?assertEqual(S, process_cmd(S, Buffer)),
+    em:verify(M).
 
 -endif.
