@@ -45,7 +45,8 @@ init([Socket]) ->
     {ok, State}.
 
 
-handle_call(_Msg, _From, State) ->
+handle_call(Msg, _From, State) ->
+    lager:warning("Got unexpected command: ~p", [Msg]),
     {reply, ok, State}.
 
 
