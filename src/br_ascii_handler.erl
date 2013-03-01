@@ -89,13 +89,13 @@ code_change(_OldVsvn, State, _Extra) -> {ok, State}.
 % Processes all commands in a buffer
 process_buffer(State, Buffer) ->
     case binary:split(Buffer, [<<"\r\n">>, <<"\n">>]) of
-        % No further commands can be processed, return remaining buffer
-        [_] -> State#state{buffer=Buffer};
-
         % Process each available command
         [Cmd, Buf] ->
             S1 = process_cmd(State, Cmd),
-            process_buffer(S1, Buf)
+            process_buffer(S1, Buf);
+
+        % No further commands can be processed, return remaining buffer
+        _ -> State#state{buffer=Buffer}
     end.
 
 %%%
@@ -325,6 +325,10 @@ process_cmd(State, <<"flush", Rest/binary>>) ->
         end,
         State
     end, Rest, State);
+
+% Ignore a blank line
+process_cmd(State, <<>>) ->
+    State;
 
 % Catch all for an undefined command
 process_cmd(State=#state{socket=Sock}, Cmd) ->
@@ -1055,7 +1059,75 @@ drop_no_filt_test() ->
     cmd_test(drop, [<<"foo">>], {error, no_filter},
              <<"drop foo">>, [?FILT_NOT_EXIST]).
 
+valid_info_test() ->
+    Props = [{probability, 0.001}, {capacity, 1000}],
+    Expect = [?START,
+              [[["probability", ?SPACE, ["0", ".", ["0", "0"], "1000"]], ?NEWLINE],
+               [["capacity", ?SPACE, "1000"], ?NEWLINE]],
+              ?END],
+    cmd_test(info, [<<"foo">>, false], {ok, Props},
+             <<"info foo">>, Expect).
 
+absolute_valid_info_test() ->
+    Props = [{probability, 0.001}, {capacity, 1000}],
+    Expect = [?START,
+              [[["probability", ?SPACE, ["0", ".", ["0", "0"], "1000"]], ?NEWLINE],
+               [["capacity", ?SPACE, "1000"], ?NEWLINE]],
+              ?END],
+    cmd_test(info, [<<"foo">>, true], {ok, Props},
+             <<"info foo +absolute">>, Expect).
+
+error_info_test() ->
+    cmd_test(info, [<<"foo">>, false], {error, timeout},
+             <<"info foo">>, [?INTERNAL_ERR]).
+
+noexist_info_test() ->
+    cmd_test(info, [<<"foo">>, false], {error, no_filter},
+             <<"info foo">>, [?FILT_NOT_EXIST]).
+
+nofilt_info_test() ->
+    cmd_test(undefined, [], [],
+             <<"info ">>, [?CLIENT_ERR, ?FILT_NEEDED, ?NEWLINE]).
+
+badfilt_info_test() ->
+    cmd_test(undefined, [], [],
+             <<"info \t">>, [?CLIENT_ERR, ?BAD_FILT_NAME, ?NEWLINE]).
+
+badflag_info_test() ->
+    cmd_test(undefined, [], [],
+             <<"info foo +tubez">>, [?CLIENT_ERR, ?UNEXPECTED_ARGS, ?NEWLINE]).
+
+alias_check_test() ->
+    cmd_test(check, [<<"foo">>, <<"bar">>], {ok, true},
+             <<"c foo bar">>, [?YES_RESP]).
+
+check_test() ->
+    cmd_test(check, [<<"foo">>, <<"bar">>], {ok, true},
+             <<"check foo bar">>, [?YES_RESP]).
+
+alias_set_test() ->
+    cmd_test(set, [<<"foo">>, <<"bar">>], {ok, true},
+             <<"s foo bar">>, [?YES_RESP]).
+
+set_test() ->
+    cmd_test(set, [<<"foo">>, <<"bar">>], {ok, true},
+             <<"set foo bar">>, [?YES_RESP]).
+
+alias_multi_test() ->
+    cmd_test(multi, [<<"foo">>, [<<"bar">>, <<"baz">>]], {ok, [false, true]},
+             <<"m foo bar baz">>, [?NO_SPACE, ?YES_RESP]).
+
+multi_test() ->
+    cmd_test(multi, [<<"foo">>, [<<"bar">>, <<"baz">>]], {ok, [false, true]},
+             <<"multi foo bar baz">>, [?NO_SPACE, ?YES_RESP]).
+
+alias_bulk_test() ->
+    cmd_test(bulk, [<<"foo">>, [<<"bar">>, <<"baz">>]], {ok, [false, true]},
+             <<"b foo bar baz">>, [?NO_SPACE, ?YES_RESP]).
+
+bulk_test() ->
+    cmd_test(bulk, [<<"foo">>, [<<"bar">>, <<"baz">>]], {ok, [false, true]},
+             <<"bulk foo bar baz">>, [?NO_SPACE, ?YES_RESP]).
 
 cmd_test(Cmd, Input, Output, Buffer, Write) ->
     M = em:new(),
@@ -1069,6 +1141,28 @@ cmd_test(Cmd, Input, Output, Buffer, Write) ->
     ok = em:replay(M),
     S = #state{socket=undefined},
     ?assertEqual(S, process_cmd(S, Buffer)),
+    em:verify(M).
+
+empty_process_buffer_test() ->
+    Buf = <<>>,
+    S = #state{socket=undefined, buffer=Buf},
+    ?assertEqual(S, process_buffer(S, <<>>)).
+
+blankline_process_buffer_test() ->
+    Buf = <<"\n">>,
+    Blank = <<>>,
+    S = #state{socket=undefined, buffer=Blank},
+    ?assertEqual(S, process_buffer(S, Buf)).
+
+line_process_buffer_test() ->
+    M = em:new(),
+    em:strict(M, gen_tcp, send, [undefined, [?CLIENT_ERR, ?CMD_NOT_SUP, ?NEWLINE]]),
+    ok = em:replay(M),
+
+    Buf = <<"tubez\n">>,
+    Blank = <<>>,
+    S = #state{socket=undefined, buffer=Blank},
+    ?assertEqual(S, process_buffer(S, Buf)),
     em:verify(M).
 
 -endif.
