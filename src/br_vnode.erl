@@ -25,6 +25,9 @@
         % Partition number
         partition,
 
+        % Index number
+        idx,
+
         % Connection to local bloomd
         conn,
 
@@ -41,6 +44,13 @@ start_vnode(I) ->
     riak_core_vnode_master:get_vnode_pid(I, ?MODULE).
 
 init([Partition]) ->
+    % Determine our v-node number
+    {ok, R} = riak_core_ring_manager:get_my_ring(),
+    Chash = riak_core_ring:chash(R),
+    {NumPartitions, _} = Chash,
+    Incr = chash:ring_increment(NumPartitions),
+    Idx = trunc(Partition / Incr),
+
     {ok, LocalHost} = application:get_env(bloomd_ring, bloomd_local_host),
     {ok, LocalPort} = application:get_env(bloomd_ring, bloomd_local_port),
 
@@ -48,7 +58,7 @@ init([Partition]) ->
     Conn = bloomd:new(LocalHost, LocalPort, false),
 
     % Setup our state
-    {ok, #state {partition=Partition, conn=Conn}}.
+    {ok, #state {partition=Partition, idx=Idx, conn=Conn}}.
 
 
 %%
