@@ -28,6 +28,9 @@
         % Index number
         idx,
 
+        % Slice pattern
+        re,
+
         % Connection to local bloomd
         conn,
 
@@ -51,6 +54,9 @@ init([Partition]) ->
     Incr = chash:ring_increment(NumPartitions),
     Idx = trunc(Partition / Incr),
 
+    % Create a slice match pattern that matches the index and colon prefix
+    {ok, Re} = re:compile(iolist_to_binary(["^", Idx, ":(.*)$"])),
+
     {ok, LocalHost} = application:get_env(bloomd_ring, bloomd_local_host),
     {ok, LocalPort} = application:get_env(bloomd_ring, bloomd_local_port),
 
@@ -58,7 +64,7 @@ init([Partition]) ->
     Conn = bloomd:new(LocalHost, LocalPort, false),
 
     % Setup our state
-    {ok, #state {partition=Partition, idx=Idx, conn=Conn}}.
+    {ok, #state{partition=Partition, idx=Idx, re=Re, conn=Conn}}.
 
 
 %%
@@ -69,7 +75,7 @@ handle_command({check_filter, FilterName, Slice, Key}, Sender, State) ->
     % Make use of pipelining instead of blocking the v-node
     spawn(fun() ->
         % Convert into the proper names
-        Name = filter_slice_name(FilterName, Slice),
+        Name = filter_slice_name(State#state.idx, FilterName, Slice),
 
         % Query bloomd
         F = bloomd:filter(State#state.conn, Name),
@@ -97,7 +103,7 @@ handle_command({set_filter, FilterName, Slice, Key}, Sender, State) ->
     % Make use of pipelining instead of blocking the v-node
     spawn(fun() ->
         % Convert into the proper names
-        Name = filter_slice_name(FilterName, Slice),
+        Name = filter_slice_name(State#state.idx, FilterName, Slice),
 
         % Query bloomd
         F = bloomd:filter(State#state.conn, Name),
@@ -132,14 +138,14 @@ handle_command({create_filter, FilterName, Options}, _Sender, State) ->
     % Determine the preflist for each slice
     Preflists = [{Slice, riak_core_apl:get_primary_apl(Idx, ?N, bloomd)} || {Slice, Idx} <- Indices],
 
-    % Get just the nodes
-    PrefNodes = [{S, [N || {{_, N}, _} <- Pref]} || {S, Pref} <- Preflists],
+    % Get just the indexes
+    PrefNodes = [{S, [Idx || {{Idx, _}, _} <- Pref]} || {S, Pref} <- Preflists],
 
-    % Get the owned slices for this node
-    Owned = [Slice || {Slice, Nodes} <- PrefNodes, lists:member(node(), Nodes)],
+    % Get the owned slices for this partition
+    Owned = [Slice || {Slice, Partitions} <- PrefNodes, lists:member(State#state.partition, Partitions)],
 
     % Convert into the proper names
-    Names = [filter_slice_name(FilterName, S) || S <- Owned],
+    Names = [filter_slice_name(State#state.idx, FilterName, S) || S <- Owned],
 
     % Execute all the creates in parallel
     Results = rpc:pmap({br_vnode, local_command}, [{create, Options}, State], Names),
@@ -431,8 +437,9 @@ local_command(Elem, Cmd, State) ->
 
 % Returns the iolist representation of a given
 % slice for a filter.
--spec filter_slice_name(iolist(), integer()) -> iolist().
-filter_slice_name(FilterName, Slice) -> [FilterName, <<":">>, integer_to_list(Slice)].
+-spec filter_slice_name(integer(), iolist(), integer()) -> iolist().
+filter_slice_name(Idx, FilterName, Slice) ->
+    [integer_to_list(Idx), <<":">>, FilterName, <<":">>, integer_to_list(Slice)].
 
 % Decomposes the filter into a tuple of the FilterName and slice
 -spec filter_slice_value(iolist()) -> {binary(), integer()}.
@@ -486,12 +493,12 @@ matching_slices(FilterName, State) ->
 -include_lib("eunit/include/eunit.hrl").
 
 filter_slice_name_bin_test() ->
-    Res = filter_slice_name(<<"testing">>, 0),
-    <<"testing:0">> = iolist_to_binary(Res).
+    Res = filter_slice_name(50, <<"testing">>, 0),
+    <<"50:testing:0">> = iolist_to_binary(Res).
 
 filter_slice_name_list_test() ->
-    Res = filter_slice_name(["foobar"], 128),
-    <<"foobar:128">> = iolist_to_binary(Res).
+    Res = filter_slice_name(21, ["foobar"], 128),
+    <<"21:foobar:128">> = iolist_to_binary(Res).
 
 filter_slice_value_bin_test() ->
     Res = filter_slice_value(<<"testing:123">>),
