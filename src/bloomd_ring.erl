@@ -79,7 +79,8 @@ create(Filter, OptionsList) ->
 
 %% @doc Lists all the existing filters using a covering set query
 list(Absolute) ->
-    lager:info("List called. Absolute: ~p", [Absolute]),
+    % DEBUG
+    % lager:info("List called. Absolute: ~p", [Absolute]),
 
     % Start a full cluster FSM to send out the command
     {ok, ReqId} = case Absolute of
@@ -226,7 +227,8 @@ check(Filter, Key) ->
 
 %% @doc Checks for multiple keys in a filter
 multi(Filter, Keys) ->
-    lager:info("Multi called on: ~p for: ~p", [Filter, Keys]),
+    % DEBUG
+    % lager:info("Multi called on: ~p for: ~p", [Filter, Keys]),
 
     % Execute all the checks in parallel
     Results = rpc:pmap({bloomd_ring, pmap_cmd}, [check, [Filter]], Keys),
@@ -271,7 +273,8 @@ set(Filter, Key) ->
 
 %% @doc Sets multiple keys in a filter
 bulk(Filter, Keys) ->
-    lager:info("Bulk called on: ~p for: ~p", [Filter, Keys]),
+    % DEBUG
+    % lager:info("Bulk called on: ~p for: ~p", [Filter, Keys]),
 
     % Execute all the sets in parallel
     Results = rpc:pmap({bloomd_ring, pmap_cmd}, [set, [Filter]], Keys),
@@ -289,7 +292,8 @@ bulk(Filter, Keys) ->
 
 %% @doc Gets information about a filter
 info(Filter, Absolute) ->
-    lager:info("Info called on: ~p with absolute: ~p", [Filter, Absolute]),
+    % DEBUG
+    % lager:info("Info called on: ~p with absolute: ~p", [Filter, Absolute]),
 
     % Start an FSM to send out the command
     {ok, ReqId} = case Absolute of

@@ -41,8 +41,10 @@ Vagrant::Config.run do |config|
 end
 
 Vagrant.configure("2") do |config|
-  config.vm.network :forwarded_port, 22, 2456,
-      :id => "ssh"
+  config.vm.network :forwarded_port,
+    guest: 22,
+    host:  2456,
+    id: "ssh"
 
   config.vm.provider :vmware_fusion do |p|
     p.vmx["numvcpus"] = "2"

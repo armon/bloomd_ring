@@ -28,6 +28,9 @@
         % Index number
         idx,
 
+        % Slice pattern
+        re,
+
         % Connection to local bloomd
         conn,
 
@@ -51,6 +54,9 @@ init([Partition]) ->
     Incr = chash:ring_increment(NumPartitions),
     Idx = trunc(Partition / Incr),
 
+    % Create a slice match pattern that matches the index and colon prefix
+    {ok, Re} = re:compile(iolist_to_binary(["^", integer_to_list(Idx), ":(.*)$"])),
+
     {ok, LocalHost} = application:get_env(bloomd_ring, bloomd_local_host),
     {ok, LocalPort} = application:get_env(bloomd_ring, bloomd_local_port),
 
@@ -58,7 +64,7 @@ init([Partition]) ->
     Conn = bloomd:new(LocalHost, LocalPort, false),
 
     % Setup our state
-    {ok, #state {partition=Partition, idx=Idx, conn=Conn}}.
+    {ok, #state{partition=Partition, idx=Idx, re=Re, conn=Conn}}.
 
 
 %%
@@ -69,7 +75,7 @@ handle_command({check_filter, FilterName, Slice, Key}, Sender, State) ->
     % Make use of pipelining instead of blocking the v-node
     spawn(fun() ->
         % Convert into the proper names
-        Name = filter_slice_name(FilterName, Slice),
+        Name = filter_slice_name(State#state.idx, FilterName, Slice),
 
         % Query bloomd
         F = bloomd:filter(State#state.conn, Name),
@@ -97,7 +103,7 @@ handle_command({set_filter, FilterName, Slice, Key}, Sender, State) ->
     % Make use of pipelining instead of blocking the v-node
     spawn(fun() ->
         % Convert into the proper names
-        Name = filter_slice_name(FilterName, Slice),
+        Name = filter_slice_name(State#state.idx, FilterName, Slice),
 
         % Query bloomd
         F = bloomd:filter(State#state.conn, Name),
@@ -126,20 +132,20 @@ handle_command({set_filter, FilterName, Slice, Key}, Sender, State) ->
 %%%
 handle_command({create_filter, FilterName, Options}, _Sender, State) ->
     % Generate a list of {Slice, Hash} for each slice
-    Partitions = br_util:num_partitions(),
-    Indices = [{Slice, riak_core_util:chash_key({FilterName, Slice})} || Slice <- lists:seq(0, Partitions-1)],
+    NumPartitions = br_util:num_partitions(),
+    Indices = [{Slice, riak_core_util:chash_key({FilterName, Slice})} || Slice <- lists:seq(0, NumPartitions-1)],
 
     % Determine the preflist for each slice
     Preflists = [{Slice, riak_core_apl:get_primary_apl(Idx, ?N, bloomd)} || {Slice, Idx} <- Indices],
 
-    % Get just the nodes
-    PrefNodes = [{S, [N || {{_, N}, _} <- Pref]} || {S, Pref} <- Preflists],
+    % Get just the indexes
+    PrefNodes = [{S, [Idx || {{Idx, _}, _} <- Pref]} || {S, Pref} <- Preflists],
 
-    % Get the owned slices for this node
-    Owned = [Slice || {Slice, Nodes} <- PrefNodes, lists:member(node(), Nodes)],
+    % Get the owned slices for this partition
+    Owned = [Slice || {Slice, Partitions} <- PrefNodes, lists:member(State#state.partition, Partitions)],
 
     % Convert into the proper names
-    Names = [filter_slice_name(FilterName, S) || S <- Owned],
+    Names = [filter_slice_name(State#state.idx, FilterName, S) || S <- Owned],
 
     % Execute all the creates in parallel
     Results = rpc:pmap({br_vnode, local_command}, [{create, Options}, State], Names),
@@ -180,12 +186,15 @@ handle_command(list_filters, _Sender, State) ->
         {error, _} -> {error, command_failed};
         _ ->
             % Extract the filter info
-            % {{FilterName, Slice}, Info}
+            % {{FilterName, Idx, Slice}, Info}
             FilterInfoList = [{filter_slice_value(F), bloomd:filter_info(I)} || {F, I} <- Results],
 
             % Collapse the duplicates by name
-            FilterCombined = lists:foldl(fun({{Name, Slice}, Info}, Accum) ->
-                dict:append(Name, {Slice, Info}, Accum)
+            FilterCombined = lists:foldl(fun({{Name, Idx, Slice}, Info}, Accum) ->
+                case State#state.idx of
+                    Idx -> dict:append(Name, {Slice, Info}, Accum);
+                    _ -> Accum
+                end
             end, dict:new(), FilterInfoList),
 
             % Return the slice info
@@ -346,7 +355,7 @@ handle_command({info_filter, FilterName}, _Sender, State) ->
                 _ ->
                     Paired = lists:zipwith(fun(Slice, Info) ->
                         % Get the slice number
-                        {_, Num} = filter_slice_value(Slice),
+                        {_, _, Num} = filter_slice_value(Slice),
 
                         % Map the number to the info
                         {Num, bloomd:info_proplist(Info)}
@@ -431,22 +440,25 @@ local_command(Elem, Cmd, State) ->
 
 % Returns the iolist representation of a given
 % slice for a filter.
--spec filter_slice_name(iolist(), integer()) -> iolist().
-filter_slice_name(FilterName, Slice) -> [FilterName, <<":">>, integer_to_list(Slice)].
+-spec filter_slice_name(integer(), iolist(), integer()) -> iolist().
+filter_slice_name(Idx, FilterName, Slice) ->
+    [integer_to_list(Idx), <<":">>, FilterName, <<":">>, integer_to_list(Slice)].
 
-% Decomposes the filter into a tuple of the FilterName and slice
--spec filter_slice_value(iolist()) -> {binary(), integer()}.
+% Decomposes the filter into a tuple of the FilterName, index and slice
+-spec filter_slice_value(iolist()) -> {binary(), integer(), integer()}.
 filter_slice_value(Filter) when is_binary(Filter) ->
-    % Find the offset of the colon
+    % Find the offset of the colons
     Size = size(Filter),
-    Offset = find_last(Filter, $:, Size - 1),
+    StartOffset = find_first(Filter, $:, 0, Size),
+    EndOffset = find_last(Filter, $:, Size - 1),
 
     % Split
-    Name = binary:part(Filter, 0, Offset),
-    Num = binary:part(Filter, Offset+1, Size-Offset-1),
+    Idx = binary:part(Filter, 0, StartOffset),
+    Name = binary:part(Filter, StartOffset+1, EndOffset - StartOffset - 1),
+    Num = binary:part(Filter, EndOffset+1, Size-EndOffset-1),
 
     % Convert to integer and return
-    {Name, list_to_integer(binary_to_list(Num))};
+    {Name, list_to_integer(binary_to_list(Idx)), list_to_integer(binary_to_list(Num))};
 
 filter_slice_value(Filter) -> filter_slice_value(iolist_to_binary(Filter)).
 
@@ -457,6 +469,16 @@ find_last(Bin, Char, Offset) ->
     case binary:at(Bin, Offset) of
         Char -> Offset;
         _ -> find_last(Bin, Char, Offset - 1)
+    end.
+
+
+% Finds the first occurrence of a character by
+% searching a binary left-to-right
+find_first(_, _, Offset, Len) when Offset =:= Len -> {error, not_found};
+find_first(Bin, Char, Offset, Len) ->
+    case binary:at(Bin, Offset) of
+        Char -> Offset;
+        _ -> find_first(Bin, Char, Offset + 1, Len)
     end.
 
 % Checks if any of the commands returned an error
@@ -478,7 +500,7 @@ matching_slices(FilterName, State) ->
         _ ->
             % Find all the matching slices
             Parts = [{F, filter_slice_value(F)} || {F, _I} <- Results],
-            [F || {F, {Name, _Slice}} <- Parts, Name =:= FilterName]
+            [F || {F, {Name, Idx, _Slice}} <- Parts, Idx =:= State#state.idx, Name =:= FilterName]
     end.
 
 
@@ -486,20 +508,20 @@ matching_slices(FilterName, State) ->
 -include_lib("eunit/include/eunit.hrl").
 
 filter_slice_name_bin_test() ->
-    Res = filter_slice_name(<<"testing">>, 0),
-    <<"testing:0">> = iolist_to_binary(Res).
+    Res = filter_slice_name(50, <<"testing">>, 0),
+    <<"50:testing:0">> = iolist_to_binary(Res).
 
 filter_slice_name_list_test() ->
-    Res = filter_slice_name(["foobar"], 128),
-    <<"foobar:128">> = iolist_to_binary(Res).
+    Res = filter_slice_name(21, ["foobar"], 128),
+    <<"21:foobar:128">> = iolist_to_binary(Res).
 
 filter_slice_value_bin_test() ->
-    Res = filter_slice_value(<<"testing:123">>),
-    {<<"testing">>, 123} = Res.
+    Res = filter_slice_value(<<"5:testing:123">>),
+    {<<"testing">>, 5, 123} = Res.
 
 filter_slice_value_list_test() ->
-    Res = filter_slice_value(["foo:bar:baz",":", "64"]),
-    {<<"foo:bar:baz">>, 64} = Res.
+    Res = filter_slice_value(["100", ":", "foo:bar:baz",":", "64"]),
+    {<<"foo:bar:baz">>, 100, 64} = Res.
 
 find_last_bad_test() ->
     {error, not_found} = find_last(<<"hi there">>, $@, 7).
@@ -507,6 +529,13 @@ find_last_bad_test() ->
 find_last_multi_test() ->
     Off = find_last(<<"a:b:c:d">>, $:, 6),
     Off = 5.
+
+find_first_bad_test() ->
+    {error, not_found} = find_first(<<"hi there">>, $@, 0, 7).
+
+find_first_multi_test() ->
+    Off = find_first(<<"a:b:c:d">>, $:, 0, 7),
+    ?assertEqual(1, Off).
 
 any_error_blank_test() ->
     false = any_error([]).
