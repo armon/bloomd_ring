@@ -186,12 +186,15 @@ handle_command(list_filters, _Sender, State) ->
         {error, _} -> {error, command_failed};
         _ ->
             % Extract the filter info
-            % {{FilterName, Slice}, Info}
+            % {{FilterName, Idx, Slice}, Info}
             FilterInfoList = [{filter_slice_value(F), bloomd:filter_info(I)} || {F, I} <- Results],
 
             % Collapse the duplicates by name
-            FilterCombined = lists:foldl(fun({{Name, Slice}, Info}, Accum) ->
-                dict:append(Name, {Slice, Info}, Accum)
+            FilterCombined = lists:foldl(fun({{Name, Idx, Slice}, Info}, Accum) ->
+                case State#state.idx of
+                    Idx -> dict:append(Name, {Slice, Info}, Accum);
+                    _ -> Accum
+                end
             end, dict:new(), FilterInfoList),
 
             % Return the slice info
@@ -352,7 +355,7 @@ handle_command({info_filter, FilterName}, _Sender, State) ->
                 _ ->
                     Paired = lists:zipwith(fun(Slice, Info) ->
                         % Get the slice number
-                        {_, Num} = filter_slice_value(Slice),
+                        {_, _, Num} = filter_slice_value(Slice),
 
                         % Map the number to the info
                         {Num, bloomd:info_proplist(Info)}
@@ -497,7 +500,7 @@ matching_slices(FilterName, State) ->
         _ ->
             % Find all the matching slices
             Parts = [{F, filter_slice_value(F)} || {F, _I} <- Results],
-            [F || {F, {Name, _Slice}} <- Parts, Name =:= FilterName]
+            [F || {F, {Name, Idx, _Slice}} <- Parts, Idx =:= State#state.idx, Name =:= FilterName]
     end.
 
 
