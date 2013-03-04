@@ -92,11 +92,8 @@ prepare(timeout, State=#state{args={FilterName, Key}}) ->
     Preflist2 = riak_core_apl:get_primary_apl(DocIdx, ?N, bloomd),
     Preflist = [Idx || {Idx, _type} <- Preflist2],
 
-    % De-duplicate nodes
-    Dedupped = dedup_preflist(Preflist),
-
     % Proceed wiht preflist and slice
-    {next_state, executing, State#state{preflist=Dedupped, slice=Slice}, 0}.
+    {next_state, executing, State#state{preflist=Preflist, slice=Slice}, 0}.
 
 
 -define(MASTER, br_vnode_master).
@@ -224,21 +221,6 @@ consensus(Responses) ->
         _ -> {false, Counted}
     end.
 
-% Removes duplicate nodes, so that the command
-% only ever hits a node once. This is because each
-% node only has a single bloomd instance underneath,
-% so any duplication is unnecessary.
-dedup_preflist(Preflist) ->
-    dedup_preflist(Preflist, [], []).
-
-dedup_preflist([], _, Accum) -> lists:reverse(Accum);
-dedup_preflist([H={_Idx, Node}| T], Seen, Accum) ->
-    case lists:member(Node, Seen) of
-        true -> dedup_preflist(T, Seen, Accum);
-        false -> dedup_preflist(T, [Node | Seen], [H | Accum])
-    end.
-
-
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 
@@ -261,11 +243,6 @@ consensus_equal_test() ->
     R = [true, false, {error, foobar}],
     C = consensus(R),
     ?assertEqual({false, [{1, {error, foobar}}, {1, true}, {1, false}]}, C).
-
-dedup_preflist_test() ->
-    In = [{1, tubez}, {2, tubez}, {3, foo}, {4, bar}, {5, foo}],
-    Out = [{1, tubez}, {3, foo}, {4, bar}],
-    ?assertEqual(Out, dedup_preflist(In)).
 
 -endif.
 
