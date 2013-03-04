@@ -441,19 +441,21 @@ local_command(Elem, Cmd, State) ->
 filter_slice_name(Idx, FilterName, Slice) ->
     [integer_to_list(Idx), <<":">>, FilterName, <<":">>, integer_to_list(Slice)].
 
-% Decomposes the filter into a tuple of the FilterName and slice
--spec filter_slice_value(iolist()) -> {binary(), integer()}.
+% Decomposes the filter into a tuple of the FilterName, index and slice
+-spec filter_slice_value(iolist()) -> {binary(), integer(), integer()}.
 filter_slice_value(Filter) when is_binary(Filter) ->
-    % Find the offset of the colon
+    % Find the offset of the colons
     Size = size(Filter),
-    Offset = find_last(Filter, $:, Size - 1),
+    StartOffset = find_first(Filter, $:, 0, Size),
+    EndOffset = find_last(Filter, $:, Size - 1),
 
     % Split
-    Name = binary:part(Filter, 0, Offset),
-    Num = binary:part(Filter, Offset+1, Size-Offset-1),
+    Idx = binary:part(Filter, 0, StartOffset),
+    Name = binary:part(Filter, StartOffset+1, EndOffset - StartOffset - 1),
+    Num = binary:part(Filter, EndOffset+1, Size-EndOffset-1),
 
     % Convert to integer and return
-    {Name, list_to_integer(binary_to_list(Num))};
+    {Name, list_to_integer(binary_to_list(Idx)), list_to_integer(binary_to_list(Num))};
 
 filter_slice_value(Filter) -> filter_slice_value(iolist_to_binary(Filter)).
 
@@ -464,6 +466,16 @@ find_last(Bin, Char, Offset) ->
     case binary:at(Bin, Offset) of
         Char -> Offset;
         _ -> find_last(Bin, Char, Offset - 1)
+    end.
+
+
+% Finds the first occurrence of a character by
+% searching a binary left-to-right
+find_first(_, _, Offset, Len) when Offset =:= Len -> {error, not_found};
+find_first(Bin, Char, Offset, Len) ->
+    case binary:at(Bin, Offset) of
+        Char -> Offset;
+        _ -> find_first(Bin, Char, Offset + 1, Len)
     end.
 
 % Checks if any of the commands returned an error
@@ -501,12 +513,12 @@ filter_slice_name_list_test() ->
     <<"21:foobar:128">> = iolist_to_binary(Res).
 
 filter_slice_value_bin_test() ->
-    Res = filter_slice_value(<<"testing:123">>),
-    {<<"testing">>, 123} = Res.
+    Res = filter_slice_value(<<"5:testing:123">>),
+    {<<"testing">>, 5, 123} = Res.
 
 filter_slice_value_list_test() ->
-    Res = filter_slice_value(["foo:bar:baz",":", "64"]),
-    {<<"foo:bar:baz">>, 64} = Res.
+    Res = filter_slice_value(["100", ":", "foo:bar:baz",":", "64"]),
+    {<<"foo:bar:baz">>, 100, 64} = Res.
 
 find_last_bad_test() ->
     {error, not_found} = find_last(<<"hi there">>, $@, 7).
@@ -514,6 +526,13 @@ find_last_bad_test() ->
 find_last_multi_test() ->
     Off = find_last(<<"a:b:c:d">>, $:, 6),
     Off = 5.
+
+find_first_bad_test() ->
+    {error, not_found} = find_first(<<"hi there">>, $@, 0, 7).
+
+find_first_multi_test() ->
+    Off = find_first(<<"a:b:c:d">>, $:, 0, 7),
+    ?assertEqual(1, Off).
 
 any_error_blank_test() ->
     false = any_error([]).
