@@ -55,7 +55,7 @@ init([Partition]) ->
     Idx = trunc(Partition / Incr),
 
     % Create a slice match pattern that matches the index and colon prefix
-    {ok, Re} = re:compile(iolist_to_binary(["^", Idx, ":(.*)$"])),
+    {ok, Re} = re:compile(iolist_to_binary(["^", integer_to_list(Idx), ":(.*)$"])),
 
     {ok, LocalHost} = application:get_env(bloomd_ring, bloomd_local_host),
     {ok, LocalPort} = application:get_env(bloomd_ring, bloomd_local_port),
