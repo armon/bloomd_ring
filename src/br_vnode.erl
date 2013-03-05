@@ -1,6 +1,9 @@
 -module(br_vnode).
 -behaviour(riak_core_vnode).
 -include("bloomd_ring.hrl").
+-ifdef(TEST).
+-compile(export_all).
+-endif.
 
 -export([start_vnode/1,
          init/1,
