@@ -219,4 +219,61 @@ clear_notproxied_test() ->
                                                    undefined, State),
     ?assertEqual({error, not_proxied}, Resp).
 
+flush_all_test() ->
+    {_, _, Client, State} = new_vnode(0),
+
+    % Simulate a response
+    spawn_link(fun() ->
+        {ok, Inp} = gen_tcp:recv(Client, 5),
+        ?assertEqual(<<"list\n">>, Inp),
+        Out = <<"START\n0:test:1 0.001 1000 500 200\n1:foo:2 0.001 1000 500 200\nEND\n">>,
+        gen_tcp:send(Client, Out),
+
+        {ok, Inp2} = gen_tcp:recv(Client, 14),
+        ?assertEqual(<<"flush 1:foo:2\n">>, Inp2),
+        gen_tcp:send(Client, <<"Done\n">>),
+
+        {ok, Inp3} = gen_tcp:recv(Client, 15),
+        ?assertEqual(<<"flush 0:test:1\n">>, Inp3),
+        gen_tcp:send(Client, <<"Done\n">>)
+    end),
+
+    {reply, Resp, State} = br_vnode:handle_command({flush_filter, undefined},
+                                                   undefined, State),
+    ?assertEqual(done, Resp).
+
+flush_specific_test() ->
+    {_, _, Client, State} = new_vnode(0),
+
+    % Simulate a response
+    spawn_link(fun() ->
+        {ok, Inp} = gen_tcp:recv(Client, 5),
+        ?assertEqual(<<"list\n">>, Inp),
+        Out = <<"START\n0:test:1 0.001 1000 500 200\n1:foo:2 0.001 1000 500 200\nEND\n">>,
+        gen_tcp:send(Client, Out),
+
+        {ok, Inp3} = gen_tcp:recv(Client, 15),
+        ?assertEqual(<<"flush 0:test:1\n">>, Inp3),
+        gen_tcp:send(Client, <<"Done\n">>)
+    end),
+
+    {reply, Resp, State} = br_vnode:handle_command({flush_filter, <<"test">>},
+                                                   undefined, State),
+    ?assertEqual(done, Resp).
+
+flush_nofilt_test() ->
+    {_, _, Client, State} = new_vnode(0),
+
+    % Simulate a response
+    spawn_link(fun() ->
+        {ok, Inp} = gen_tcp:recv(Client, 5),
+        ?assertEqual(<<"list\n">>, Inp),
+        Out = <<"START\nEND\n">>,
+        gen_tcp:send(Client, Out)
+    end),
+
+    {reply, Resp, State} = br_vnode:handle_command({flush_filter, <<"test">>},
+                                                   undefined, State),
+    ?assertEqual({error, no_filter}, Resp).
+
 
