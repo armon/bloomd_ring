@@ -6,6 +6,7 @@
          merge_slice_info/1,
          collapse_slice_info/1,
          merge_filter_info/1,
+         hash_slice/2,
          collapse_list_info/1
         ]).
 
@@ -44,6 +45,10 @@ keyslice(Key, Partitions) when is_binary(Key), is_integer(Partitions) ->
     % Mod by the ring size
     Digest rem Partitions.
 
+
+% Computes the index of the filter and slice on the ring
+hash_slice(Filter, Slice) ->
+    riak_core_util:chash_std_keyfun({Filter, Slice}).
 
 % Merges the slice information returned by the `list` command for
 % a single slice. Slice information is merged by taking the maximum
@@ -213,5 +218,10 @@ collapse_list_info_test() ->
             {<<"Foo">>, [{bytes, 350}, {size, 11000}, {probability, 0.005}, {capacity, 6000}]}
             ],
     ?assertEqual(Expect, Merged).
+
+hash_slice_test() ->
+    Idx = hash_slice(<<"foo">>, 5),
+    Expect = riak_core_util:chash_std_keyfun({<<"foo">>, 5}),
+    ?assertEqual(Expect, Idx).
 
 -endif.

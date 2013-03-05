@@ -136,7 +136,8 @@ handle_command({set_filter, FilterName, Slice, Key}, Sender, State) ->
 handle_command({create_filter, FilterName, Options}, _Sender, State) ->
     % Generate a list of {Slice, Hash} for each slice
     NumPartitions = br_util:num_partitions(),
-    Indices = [{Slice, riak_core_util:chash_key({FilterName, Slice})} || Slice <- lists:seq(0, NumPartitions-1)],
+    Indices = [{Slice, br_util:hash_slice(FilterName, Slice)}
+               || Slice <- lists:seq(0, NumPartitions-1)],
 
     % Determine the preflist for each slice
     Preflists = [{Slice, riak_core_apl:get_primary_apl(Idx, ?N, bloomd)} || {Slice, Idx} <- Indices],
