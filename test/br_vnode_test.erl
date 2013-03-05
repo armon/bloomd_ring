@@ -276,4 +276,57 @@ flush_nofilt_test() ->
                                                    undefined, State),
     ?assertEqual({error, no_filter}, Resp).
 
+info_test() ->
+    {_, _, Client, State} = new_vnode(0),
+
+    % Simulate a response
+    spawn_link(fun() ->
+        {ok, Inp} = gen_tcp:recv(Client, 5),
+        ?assertEqual(<<"list\n">>, Inp),
+        Out = <<"START\n0:test:1 0.001 1000 500 200\n1:foo:2 0.001 1000 500 200\nEND\n">>,
+        gen_tcp:send(Client, Out),
+
+        {ok, Inp3} = gen_tcp:recv(Client, 14),
+        ?assertEqual(<<"info 0:test:1\n">>, Inp3),
+        Info = <<"START\nprobability 0.001\ncapacity 1000\nchecks 5000\nEND\n">>,
+        gen_tcp:send(Client, Info)
+    end),
+
+    {reply, Resp, State} = br_vnode:handle_command({info_filter, <<"test">>},
+                                                   undefined, State),
+    Info = [{1, [{probability, 0.001}, {capacity, 1000}, {checks, 5000}]}],
+    ?assertEqual({ok, Info}, Resp).
+
+create_test() ->
+    {_, _, Client, State} = new_vnode(0),
+
+    % Simulate a response
+    spawn_link(fun() ->
+        {ok, Inp} = gen_tcp:recv(Client, 16),
+        ?assertEqual(<<"create 0:test:2\n">>, Inp),
+        gen_tcp:send(Client, <<"Done\n">>),
+
+        {ok, Inp2} = gen_tcp:recv(Client, 16),
+        ?assertEqual(<<"create 0:test:0\n">>, Inp2),
+        gen_tcp:send(Client, <<"Done\n">>)
+    end),
+
+    % Mock out core calls
+    M = em:new(),
+    em:strict(M, br_util, num_partitions, [], {return, 3}),
+    em:strict(M, br_util, hash_slice, [<<"test">>, 0], {return, 0}),
+    em:strict(M, br_util, hash_slice, [<<"test">>, 1], {return, 1}),
+    em:strict(M, br_util, hash_slice, [<<"test">>, 2], {return, 2}),
+    em:strict(M, riak_core_apl, get_primary_apl, [0, 3, bloomd],
+              {return, [{{0, node1}, primary}, {{1, node2}, primary}]}),
+    em:strict(M, riak_core_apl, get_primary_apl, [1, 3, bloomd],
+              {return, [{{1, node1}, primary}, {{2, node2}, primary}]}),
+    em:strict(M, riak_core_apl, get_primary_apl, [2, 3, bloomd],
+              {return, [{{0, node1}, primary}, {{2, node2}, primary}]}),
+    ok = em:replay(M),
+
+    {reply, Resp, State} = br_vnode:handle_command({create_filter, <<"test">>, []},
+                                                   undefined, State),
+    ?assertEqual(done, Resp),
+    em:verify(M).
 
