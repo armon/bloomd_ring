@@ -170,6 +170,12 @@ repairing(timeout, State=#state{resp=Resps, op=Op, args={Filter, Key}}) ->
             br_repair:maybe_repair(Filter);
 
         % If one of the nodes belive that the filter does not
+        % exist, then maybe a create is needed. Handle the
+        % non-agreed case
+        [{1, {ok, _}}, {1, {ok, _}}, {1, {error, no_filter}}] ->
+            br_repair:maybe_repair(Filter);
+
+        % If one of the nodes belive that the filter does not
         % exist, then maybe a create is needed
         [{2, {ok, _}}, {1, {error, no_filter}}] ->
             br_repair:maybe_repair(Filter);
