@@ -43,8 +43,7 @@ create(Filter, OptionsList) ->
     Opt2 = case proplists:get_value(capacity, Opt1) of
         undefined -> Opt1;
         Capacity ->
-            {ok, Ring} = riak_core_ring_manager:get_my_ring(),
-            Partitions = riak_core_ring:num_partitions(Ring),
+            Partitions = br_util:num_partitions(),
             NewCap = max(br_util:ceiling(Capacity / Partitions), ?MIN_PARTITION_SIZE),
             lists:keyreplace(capacity, 1, Opt1, {capacity, NewCap})
     end,
