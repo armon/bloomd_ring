@@ -177,12 +177,7 @@ repairing(timeout, State=#state{resp=Resps, op=Op, args={Filter, Key}}) ->
         % If we don't match any condition, do nothing
         _ -> ok
     end,
-    {stop, normal, State};
-
-% Handle a straggling message
-repairing(Resp, State=#state{resp=Buf}) ->
-    NewBuf = [Resp | Buf],
-    {next_state, repairing, State#state{resp=NewBuf}, 0}.
+    {stop, normal, State}.
 
 
 %%%
