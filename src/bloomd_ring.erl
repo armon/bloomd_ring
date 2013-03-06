@@ -376,3 +376,20 @@ wait_for_req(ReqId, Timeout) ->
 pmap_cmd(Key, Op, Args) ->
     apply(bloomd_ring, Op, Args ++ [Key]).
 
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+wait_for_req_test() ->
+    ReqId = 42,
+    S = self(),
+    spawn(fun() ->
+        S ! {ReqId, ok}
+    end),
+    Res = wait_for_req(ReqId),
+    ?assertEqual(ok, Res).
+
+wait_for_req_timeout_test() ->
+    ?assertEqual({error, timeout}, wait_for_req(os:timestamp(), 50)).
+
+-endif.
+
