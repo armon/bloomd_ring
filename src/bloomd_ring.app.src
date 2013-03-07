@@ -14,6 +14,7 @@
     {bloomd_ascii_port, 8683},
     {bloomd_accept_pool, 8},
     {bloomd_local_host, "127.0.0.1"},
-    {bloomd_local_port, 8673}
+    {bloomd_local_port, 8673},
+    {bloomd_worker_pool_size, 10}
   ]}
  ]}.
