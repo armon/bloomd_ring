@@ -396,6 +396,14 @@ handle_handoff_command(_Message, _Sender, State) ->
     {noreply, State}.
 
 handoff_starting(_TargetNode, State) ->
+    case matching_index(State) of
+        Slices when is_list(Slices) ->
+            % Flush all the slices to ensure that we hand off proceeds with
+            % a clean state.
+            rpc:pmap({br_vnode, local_command}, [flush, State], Slices);
+
+        _ -> ok
+    end,
     {true, State#state{handoff=true}}.
 
 handoff_cancelled(State) ->

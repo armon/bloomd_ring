@@ -333,18 +333,36 @@ create_test() ->
     ?assertEqual(done, Resp),
     em:verify(M).
 
-handoff_state_test() ->
-    {_, _, _, State} = new_vnode(0),
-    {true, R} = br_vnode:handoff_starting(tubez, State),
-    {state, _, _, _, _, true} = R,
+handoff_start_test() ->
+    {_, _, Client, State} = new_vnode(0),
 
-    {ok, R1} = br_vnode:handoff_cancelled(R),
+    % Simulate a response
+    spawn_link(fun() ->
+        {ok, Inp} = gen_tcp:recv(Client, 5),
+        ?assertEqual(<<"list\n">>, Inp),
+        Out = <<"START\n0:tubez:1 0.001 1000 500 200\n1:invalid:2 0.001 1000 500 200\nEND\n">>,
+        gen_tcp:send(Client, Out),
+
+        {ok, Inp1} = gen_tcp:recv(Client, 16),
+        ?assertEqual(<<"flush 0:tubez:1\n">>, Inp1),
+        gen_tcp:send(Client, <<"Done\n">>)
+    end),
+
+    {true, R} = br_vnode:handoff_starting(tubez, State),
+    {state, _, _, _, _, true} = R.
+
+handoff_end_state_test() ->
+    {_, _, _, State} = new_vnode(0),
+    {state, A, B, C, D, _} = State,
+    Started = {state, A, B, C, D, true},
+
+    {ok, R1} = br_vnode:handoff_cancelled(Started),
     {state, _, _, _, _, false} = R1,
 
-    {ok, R2} = br_vnode:handoff_finished(tubez, R),
+    {ok, R2} = br_vnode:handoff_finished(tubez, Started),
     {state, _, _, _, _, false} = R2.
 
-handoff_test() ->
+handoff_foldreq_test() ->
     {_, _, _, State} = new_vnode(0),
     R = br_vnode:handle_command(?FOLD_REQ{foldfun=cool, acc0=stuff}, undefined, State),
     ?assertEqual({async, {handoff, 0, cool, stuff}, undefined, State}, R).
