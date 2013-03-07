@@ -12,8 +12,8 @@
 init_worker(VNodeIndex, _Args, _Props) ->
      {ok, #state{index=VNodeIndex}}.
 
-% Ignore any unexpected tasks
-handle_work(Work, _Sender, State) ->
-    lager:warning("Ignoring unexpected work: ~p", [Work]),
-    {noreply, State}.
+handle_work({handoff, Idx, Fun, Accum}, _Sender, State) ->
+    lager:notice("Attempting handoff of index: ~p", [Idx]),
+    Resp = br_handoff:handoff(Idx, Fun, Accum),
+    {reply, Resp, State}.
 

@@ -1,6 +1,7 @@
 -module(br_vnode).
 -behaviour(riak_core_vnode).
 -include("bloomd_ring.hrl").
+-include_lib("riak_core/include/riak_core_vnode.hrl").
 -ifdef(TEST).
 -compile(export_all).
 -endif.
@@ -381,6 +382,10 @@ handle_command({info_filter, FilterName}, _Sender, State) ->
 %% Sample command: respond to a ping
 handle_command(ping, _Sender, State) ->
     {reply, {pong, State#state.partition}, State};
+
+% Handle a handoff request
+handle_command(?FOLD_REQ{foldfun=Fun, acc0=Accum}, Sender, State=#state{idx=Idx}) ->
+    {async, {handoff, Idx, Fun, Accum}, Sender, State};
 
 handle_command(Message, _Sender, State) ->
     ?PRINT({unhandled_command, Message}),
