@@ -338,3 +338,19 @@ handoff_test() ->
     R = br_vnode:handle_command(?FOLD_REQ{foldfun=cool, acc0=stuff}, undefined, State),
     ?assertEqual({async, {handoff, 0, cool, stuff}, undefined, State}, R).
 
+handoff_encode_test() ->
+    M = em:new(),
+    em:strict(M, br_handoff, encode, [key, value], {return, tubez}),
+    ok = em:replay(M),
+    ?assertEqual(tubez, br_vnode:encode_handoff_item(key, value)),
+    em:verify(M).
+
+handoff_decode_test() ->
+    {_, _, _, State} = new_vnode(0),
+    M = em:new(),
+    em:strict(M, br_handoff, decode, [raw], {return, parsed}),
+    em:strict(M, br_handoff, handle_receive, [parsed], {return, ok}),
+    ok = em:replay(M),
+    ?assertEqual({reply, ok, State}, br_vnode:handle_handoff_data(raw, State)),
+    em:verify(M).
+

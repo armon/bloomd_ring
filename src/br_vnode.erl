@@ -404,15 +404,23 @@ handoff_cancelled(State) ->
 handoff_finished(_TargetNode, State) ->
     {ok, State#state{handoff=false}}.
 
-handle_handoff_data(_Data, State) ->
-    {reply, ok, State}.
+% Called to handle data that is received (receiver side)
+handle_handoff_data(Data, State) ->
+    Inp = br_handoff:decode(Data),
+    Resp = br_handoff:handle_receive(Inp),
+    {reply, Resp, State}.
 
-encode_handoff_item(_ObjectName, _ObjectValue) ->
-    <<>>.
+% Called to encode data sender side
+encode_handoff_item(Key, Value) ->
+    br_handoff:encode(Key, Value).
 
+% Checks if handoff is necessary. If is_empty then
+% handoff immediately terminates.
 is_empty(State) ->
     {true, State}.
 
+% Called once handoff is done to delete all data
+% owned by this vnode.
 delete(State) ->
     {ok, State}.
 
