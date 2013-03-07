@@ -1,5 +1,6 @@
 -module(br_vnode_test).
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("riak_core/include/riak_core_vnode.hrl").
 -compile(export_all).
 -define(MASTER, br_vnode_master).
 
@@ -331,4 +332,9 @@ create_test() ->
                                                    undefined, State),
     ?assertEqual(done, Resp),
     em:verify(M).
+
+handoff_test() ->
+    {_, _, _, State} = new_vnode(0),
+    R = br_vnode:handle_command(?FOLD_REQ{foldfun=cool, acc0=stuff}, undefined, State),
+    ?assertEqual({async, {handoff, 0, cool, stuff}, undefined, State}, R).
 
