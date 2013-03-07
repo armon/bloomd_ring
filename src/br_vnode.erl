@@ -62,12 +62,16 @@ init([Partition]) ->
 
     {ok, LocalHost} = application:get_env(bloomd_ring, bloomd_local_host),
     {ok, LocalPort} = application:get_env(bloomd_ring, bloomd_local_port),
+    {ok, PoolSize} = application:get_env(bloomd_ring, bloomd_worker_pool_size),
 
     % Try to connect to the local bloomd without key hashing enabled
     Conn = bloomd:new(LocalHost, LocalPort, false),
 
+    % Configure the worker pool
+    Pool = {pool, br_worker, PoolSize, []},
+
     % Setup our state
-    {ok, #state{partition=Partition, idx=Idx, re=Re, conn=Conn}}.
+    {ok, #state{partition=Partition, idx=Idx, re=Re, conn=Conn}, [Pool]}.
 
 
 %%
