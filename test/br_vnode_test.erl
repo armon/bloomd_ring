@@ -333,6 +333,17 @@ create_test() ->
     ?assertEqual(done, Resp),
     em:verify(M).
 
+handoff_state_test() ->
+    {_, _, _, State} = new_vnode(0),
+    {true, R} = br_vnode:handoff_starting(tubez, State),
+    {state, _, _, _, _, true} = R,
+
+    {ok, R1} = br_vnode:handoff_cancelled(R),
+    {state, _, _, _, _, false} = R1,
+
+    {ok, R2} = br_vnode:handoff_finished(tubez, R),
+    {state, _, _, _, _, false} = R2.
+
 handoff_test() ->
     {_, _, _, State} = new_vnode(0),
     R = br_vnode:handle_command(?FOLD_REQ{foldfun=cool, acc0=stuff}, undefined, State),
@@ -353,4 +364,64 @@ handoff_decode_test() ->
     ok = em:replay(M),
     ?assertEqual({reply, ok, State}, br_vnode:handle_handoff_data(raw, State)),
     em:verify(M).
+
+is_empty_false_test() ->
+    {_, _, Client, State} = new_vnode(0),
+
+    % Simulate a response
+    spawn_link(fun() ->
+        {ok, Inp} = gen_tcp:recv(Client, 5),
+        ?assertEqual(<<"list\n">>, Inp),
+        Out = <<"START\n0:tubez:1 0.001 1000 500 200\n1:invalid:2 0.001 1000 500 200\nEND\n">>,
+        gen_tcp:send(Client, Out)
+    end),
+
+    Resp = br_vnode:is_empty(State),
+    ?assertEqual({false, State}, Resp).
+
+is_empty_true_test() ->
+    {_, _, Client, State} = new_vnode(0),
+
+    % Simulate a response
+    spawn_link(fun() ->
+        {ok, Inp} = gen_tcp:recv(Client, 5),
+        ?assertEqual(<<"list\n">>, Inp),
+        Out = <<"START\n1:invalid:2 0.001 1000 500 200\nEND\n">>,
+        gen_tcp:send(Client, Out)
+    end),
+
+    Resp = br_vnode:is_empty(State),
+    ?assertEqual({true, State}, Resp).
+
+delete_test() ->
+    {_, _, Client, State} = new_vnode(0),
+
+    % Simulate a response
+    spawn_link(fun() ->
+        {ok, Inp} = gen_tcp:recv(Client, 5),
+        ?assertEqual(<<"list\n">>, Inp),
+        Out = <<"START\n0:tubez:1 0.001 1000 500 200\n1:invalid:2 0.001 1000 500 200\nEND\n">>,
+        gen_tcp:send(Client, Out),
+
+        {ok, Inp1} = gen_tcp:recv(Client, 15),
+        ?assertEqual(<<"drop 0:tubez:1\n">>, Inp1),
+        gen_tcp:send(Client, <<"Done\n">>)
+    end),
+
+    Resp = br_vnode:delete(State),
+    ?assertEqual({ok, State}, Resp).
+
+delete_empty_test() ->
+    {_, _, Client, State} = new_vnode(0),
+
+    % Simulate a response
+    spawn_link(fun() ->
+        {ok, Inp} = gen_tcp:recv(Client, 5),
+        ?assertEqual(<<"list\n">>, Inp),
+        Out = <<"START\n1:invalid:2 0.001 1000 500 200\nEND\n">>,
+        gen_tcp:send(Client, Out)
+    end),
+
+    Resp = br_vnode:delete(State),
+    ?assertEqual({ok, State}, Resp).
 

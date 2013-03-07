@@ -417,11 +417,21 @@ encode_handoff_item(Key, Value) ->
 % Checks if handoff is necessary. If is_empty then
 % handoff immediately terminates.
 is_empty(State) ->
-    {true, State}.
+    % Looks for any slices owned by this vnode
+    case matching_index(State) of
+        [] -> {true, State};
+        _ -> {false, State}
+    end.
 
 % Called once handoff is done to delete all data
 % owned by this vnode.
 delete(State) ->
+    case matching_index(State) of
+        {error, Err} -> lager:error("Failed to delete the indexes for vnode ~p, got ~p",
+                        [State#state.idx, Err]);
+        [] -> ok;
+        Slices -> rpc:pmap({br_vnode, local_command}, [drop, State], Slices)
+    end,
     {ok, State}.
 
 % Normal handling of list_filters and info_filters
@@ -524,6 +534,21 @@ matching_slices(FilterName, State) ->
             [F || {F, {Name, Idx, _Slice}} <- Parts, Idx =:= State#state.idx, Name =:= FilterName]
     end.
 
+% Finds all the slices matching only the index of the
+% vnode, ignoring the filter name.
+-spec matching_index(#state{}) -> {error, command_failed} | [binary()].
+matching_index(State) ->
+    % Find all the filters
+    Results = bloomd:list(State#state.conn),
+
+    % Check for error
+    case any_error(Results) of
+        true -> {error, command_failed};
+        _ ->
+            % Find all the matching slices
+            Parts = [{F, filter_slice_value(F)} || {F, _I} <- Results],
+            [F || {F, {_Name, Idx, _Slice}} <- Parts, Idx =:= State#state.idx]
+    end.
 
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
