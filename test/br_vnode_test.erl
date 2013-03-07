@@ -443,3 +443,29 @@ delete_empty_test() ->
     Resp = br_vnode:delete(State),
     ?assertEqual({ok, State}, Resp).
 
+handoff_command_write_test() ->
+    {_, _, _, State} = new_vnode(0),
+    Err = {reply, {error, handoff}, State},
+    ?assertEqual(Err, br_vnode:handle_handoff_command({create_filter, a, b}, undefined, State)),
+    ?assertEqual(Err, br_vnode:handle_handoff_command({set_filter, a, b, c}, undefined, State)),
+    ?assertEqual(Err, br_vnode:handle_handoff_command({drop_filter, a}, undefined, State)),
+    ?assertEqual(Err, br_vnode:handle_handoff_command({close_filter, a}, undefined, State)),
+    ?assertEqual(Err, br_vnode:handle_handoff_command({clear_filter, a}, undefined, State)).
+
+handoff_command_read_test() ->
+    {_, _, _, State} = new_vnode(0),
+
+    % Mock the bloomd:check call
+    {state, _, _, _, Conn, _} = State,
+    F = bloomd:filter(Conn, <<"foo">>),
+    M = em:new(),
+    em:strict(M, bloomd, filter, [Conn, ["0", <<":">>, <<"foo">>, <<":">>, "1"]], {return, F}),
+    em:strict(M, bloomd, check, [F, <<"bar">>], {return, {ok, [true]}}),
+    em:strict(M, riak_core_vnode, reply, [undefined, {ok, true}]),
+    ok = em:replay(M),
+
+    ?assertEqual({noreply, State},
+                 br_vnode:handle_handoff_command({check_filter, <<"foo">>, 1, <<"bar">>}, undefined, State)),
+    timer:sleep(150),
+    em:verify(M).
+

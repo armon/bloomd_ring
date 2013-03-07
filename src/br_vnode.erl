@@ -392,8 +392,22 @@ handle_command(Message, _Sender, State) ->
     {noreply, State}.
 
 
-handle_handoff_command(_Message, _Sender, State) ->
-    {noreply, State}.
+handle_handoff_command(Msg, Sender, State) ->
+    % Get the command
+    Cmd = case is_tuple(Msg) of
+        true -> element(1, Msg);
+        false -> Msg
+    end,
+
+    % Special case the command
+    case Cmd of
+        set_filter -> {reply, {error, handoff}, State};
+        create_filter -> {reply, {error, handoff}, State};
+        drop_filter -> {reply, {error, handoff}, State};
+        close_filter -> {reply, {error, handoff}, State};
+        clear_filter -> {reply, {error, handoff}, State};
+        _ -> handle_command(Msg, Sender, State)
+    end.
 
 handoff_starting(_TargetNode, State) ->
     case matching_index(State) of
