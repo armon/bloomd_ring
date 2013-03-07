@@ -16,9 +16,11 @@ new_vnode(Partition) ->
     {ok, Port} = inet:port(Sock),
     application:set_env(bloomd_ring, bloomd_local_host, "127.0.0.1"),
     application:set_env(bloomd_ring, bloomd_local_port, Port),
+    application:set_env(bloomd_ring, bloomd_worker_pool_size, 10),
 
     % Start the vnode
-    {ok, State} = br_vnode:init([Partition]),
+    {ok, State, [Pool]} = br_vnode:init([Partition]),
+    ?assertEqual({pool, br_worker, 10, []}, Pool),
     em:verify(M),
 
     % Get the client
