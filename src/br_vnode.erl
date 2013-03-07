@@ -460,10 +460,7 @@ delete(State) ->
 handle_coverage(Cmd=list_filters, _KeySpaces, Sender, State) ->
     handle_command(Cmd, Sender, State);
 handle_coverage(Cmd={info_filter, _}, _KeySpaces, Sender, State) ->
-    handle_command(Cmd, Sender, State);
-
-handle_coverage(_Req, _KeySpaces, _Sender, State) ->
-    {stop, not_implemented, State}.
+    handle_command(Cmd, Sender, State).
 
 handle_exit(_Pid, _Reason, State) ->
     {noreply, State}.
@@ -486,8 +483,7 @@ local_command(Elem, Cmd, State) ->
         close -> bloomd:close(bloomd:filter(State#state.conn, Elem));
         clear -> bloomd:clear(bloomd:filter(State#state.conn, Elem));
         flush -> bloomd:flush(bloomd:filter(State#state.conn, Elem));
-        info -> bloomd:info(bloomd:filter(State#state.conn, Elem));
-        _ -> {error, unknown_command}
+        info -> bloomd:info(bloomd:filter(State#state.conn, Elem))
     end.
 
 
