@@ -33,19 +33,42 @@ handoff(Idx, FoldFun, Accum) ->
         handoff_dir(FullDir, FoldFun, Acc)
     end, Accum, Matching).
 
+
 % Encodes a key/value pair for handoff. This takes
 % the key/value terms that are handed to the FoldFun
 % in handoff, and prepares them to be transmitted as a
 % binary.
 -spec encode(term(), term()) -> binary().
 encode(Key, Value) ->
-    ok.
+    % Compress the value
+    Compressed = zlib:zip(Value),
+
+    % Convert the key to a binary
+    Header = term_to_binary(Key),
+    HeaderSize = size(Header),
+
+    % Pack all the part together, length prefix the header.
+    % This makes the assumption that a header is always smaller
+    % than 16MB, which seems fairly sane.
+    <<HeaderSize:24/integer, Header/binary, Compressed/binary>>.
+
 
 % Decodes the data that is encoded using encode,
 % and prepares the result to be handed to handle_receive.
 -spec decode(binary()) -> term().
 decode(Data) ->
-    ok.
+    % Get the header size
+    <<HeaderSize:24/integer, Rest/binary>> = Data,
+
+    % Unpack the header and compressed body
+    Bits = HeaderSize*8,
+    <<Header:Bits/binary, Compressed/binary>> = Rest,
+
+    % Unpack everything
+    Key = binary_to_term(Header),
+    Value = zlib:unzip(Compressed),
+    {Key, Value}.
+
 
 % Handles the data that is decoded using decode,
 % and which was originally send via handoff invoking
