@@ -86,8 +86,15 @@ handle_receive({{partial, Path, Offset, Size}, Bin}) ->
     % Get the file handle, open if necessary
     FH = case get({partial, Path}) of
         undefined ->
+            % Open and cache the file handle
             {ok, IoDev} = file:open(Path, [write, binary]),
             put({partial, Path}, IoDev),
+
+            % Ensure the file is the correct size
+            {ok, Size} = file:position(IoDev, Size),
+            ok = file:truncate(IoDev),
+            {ok, 0} = file:position(IoDev, 0),
+
             IoDev;
 
         IoDev -> IoDev
@@ -100,7 +107,9 @@ handle_receive({{partial, Path, Offset, Size}, Bin}) ->
     case Offset+size(Bin) >= Size of
         true ->
             file:close(FH),
-            erase({partial, Path});
+            erase({partial, Path}),
+            ok;
+
         _ -> ok
     end.
 
