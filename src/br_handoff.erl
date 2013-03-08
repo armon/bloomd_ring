@@ -79,6 +79,7 @@ decode(Data) ->
 -spec handle_receive(term()) -> ok.
 handle_receive({{file, Path}, Bin}) ->
     % Write the entire file at once
+    lager:notice("Received handoff of file ~p", [Path]),
     ok = file:write_file(Path, Bin), ok;
 
 % Attempt to do a partial write.
@@ -87,6 +88,7 @@ handle_receive({{partial, Path, Offset, Size}, Bin}) ->
     FH = case get({partial, Path}) of
         undefined ->
             % Open and cache the file handle
+            lager:notice("Started partial handoff of file ~p", [Path]),
             {ok, IoDev} = file:open(Path, [write, binary]),
             put({partial, Path}, IoDev),
 
@@ -106,12 +108,28 @@ handle_receive({{partial, Path, Offset, Size}, Bin}) ->
     % Check if we should close the device
     case Offset+size(Bin) >= Size of
         true ->
+            lager:notice("Completed handoff of file ~p", [Path]),
             file:close(FH),
             erase({partial, Path}),
             ok;
 
         _ -> ok
-    end.
+    end;
+
+% When we receive a "filter", it means that all
+% the pieces are in place and that the filter should
+% be faulted in now.
+handle_receive({{filter, Name}, _}) ->
+    % Connect to the local bloomd
+    {ok, LocalHost} = application:get_env(bloomd_ring, bloomd_local_host),
+    {ok, LocalPort} = application:get_env(bloomd_ring, bloomd_local_port),
+    Conn = bloomd:new(LocalHost, LocalPort, false),
+
+    % Trigger a fault in of the filter
+    lager:notice("Faulting in filter ~p", [Name]),
+    done = bloomd:create(Conn, Name, []),
+    ok.
+
 
 % This method is used to hand off the contents
 % of a single folder.
