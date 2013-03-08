@@ -36,3 +36,28 @@ handoff_test() ->
     ?assertEqual(3, NewAcc),
     em:verify(M).
 
+handoff_receive_file_test() ->
+    M = em:new(),
+    em:strict(M, file, write_file, [pathtofile, data], {return, ok}),
+    ok = em:replay(M),
+
+    ok = br_handoff:handle_receive({{file, pathtofile}, data}),
+    em:verify(M).
+
+handoff_receive_partial_test() ->
+    M = em:new(),
+    em:strict(M, file, open, [pathtofile, [write, binary]], {return, {ok, iodev}}),
+    em:strict(M, file, position, [iodev, 1024000], {return, {ok, 1024000}}),
+    em:strict(M, file, truncate, [iodev], {return, ok}),
+    em:strict(M, file, position, [iodev, 0], {return, {ok, 0}}),
+
+    em:strict(M, file, pwrite, [iodev, 0, <<"data">>], {return, ok}),
+    em:strict(M, file, pwrite, [iodev, 1024000-4, <<"more">>], {return, ok}),
+
+    em:strict(M, file, close, [iodev], {return, ok}),
+    ok = em:replay(M),
+
+    ok = br_handoff:handle_receive({{partial, pathtofile, 0, 1024000}, <<"data">>}),
+    ok = br_handoff:handle_receive({{partial, pathtofile, 1024000-4, 1024000}, <<"more">>}),
+    em:verify(M).
+
