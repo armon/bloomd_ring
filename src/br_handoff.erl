@@ -2,6 +2,9 @@
 -module(br_handoff).
 -export([handoff/3, encode/2, decode/1, handle_receive/1]).
 -include_lib("kernel/include/file.hrl").
+-ifdef(TEST).
+-compile(export_all).
+-endif.
 
 % This constant defines the chunk size we use for transfering
 % data. We want a chunk size that is large enough to be efficient
