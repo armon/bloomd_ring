@@ -74,10 +74,35 @@ decode(Data) ->
 
 % Handles the data that is decoded using decode,
 % and which was originally send via handoff invoking
-% the FoldFun
+% the FoldFun. We either receive the full file, or
+% a partial file.
 -spec handle_receive(term()) -> ok.
-handle_receive(Input) ->
-    ok.
+handle_receive({{file, Path}, Bin}) ->
+    % Write the entire file at once
+    ok = file:write_file(Path, Bin), ok;
+
+% Attempt to do a partial write.
+handle_receive({{partial, Path, Offset, Size}, Bin}) ->
+    % Get the file handle, open if necessary
+    FH = case get({partial, Path}) of
+        undefined ->
+            {ok, IoDev} = file:open(Path, [write, binary]),
+            put({partial, Path}, IoDev),
+            IoDev;
+
+        IoDev -> IoDev
+    end,
+
+    % Do a partial write
+    ok = file:pwrite(FH, Offset, Bin),
+
+    % Check if we should close the device
+    case Offset+size(Bin) >= Size of
+        true ->
+            file:close(FH),
+            erase({partial, Path});
+        _ -> ok
+    end.
 
 % This method is used to hand off the contents
 % of a single folder.
