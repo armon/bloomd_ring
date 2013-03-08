@@ -25,16 +25,22 @@ handoff(Idx, FoldFun, Accum) ->
     {ok, Contents} = file:list_dir(DataDir),
 
     % Create a match pattern that matches the index only
-    {ok, Re} = re:compile(iolist_to_binary(["^bloomd.", integer_to_list(Idx), ":"])),
+    {ok, Re} = re:compile(iolist_to_binary(["^bloomd.(", integer_to_list(Idx), ":.*)$"])),
 
     % Find all matching directories
     Matching = [C || C <- Contents, re:run(C, Re) =/= nomatch],
 
-    % Fold over each directory
-    lists:foldl(fun(Dir, Acc) ->
+    % Fold over each directory to do the transfer
+    TransferAccum = lists:foldl(fun(Dir, Acc) ->
         FullDir = filename:join(DataDir, Dir),
         handoff_dir(FullDir, FoldFun, Acc)
-    end, Accum, Matching).
+    end, Accum, Matching),
+
+    % Fault in all the filters
+    lists:foldl(fun(Dir, Acc) ->
+        {match, [Name]} = re:run(Dir, Re, [{capture, all_but_first, binary}]),
+        FoldFun({filter, Name}, <<"fault">>, Acc)
+    end, TransferAccum, Matching).
 
 
 % Encodes a key/value pair for handoff. This takes

@@ -31,9 +31,15 @@ handoff_test() ->
     ok = em:replay(M),
 
     % Try to handoff
-    FoldFun = fun(_, _, Acc) -> Acc+1 end,
-    NewAcc = br_handoff:handoff(0, FoldFun, 0),
-    ?assertEqual(3, NewAcc),
+    FoldFun = fun({file, "/tmp/bloomd.0:foo:1/config.ini"}, _, {FileAcc, PartAcc, FiltAcc}) ->
+            {FileAcc+1 , PartAcc, FiltAcc};
+        ({partial, "/tmp/bloomd.0:foo:1/data.00" ++ _More, _, _}, _, {FileAcc, PartAcc, FiltAcc}) ->
+            {FileAcc, PartAcc+1, FiltAcc};
+        ({filter, <<"0:foo:1">>}, _, {FileAcc, PartAcc, FiltAcc}) ->
+            {FileAcc, PartAcc, FiltAcc+1}
+    end,
+    NewAcc = br_handoff:handoff(0, FoldFun, {0, 0, 0}),
+    ?assertEqual({1, 2, 1}, NewAcc),
     em:verify(M).
 
 handoff_receive_file_test() ->
@@ -59,5 +65,18 @@ handoff_receive_partial_test() ->
 
     ok = br_handoff:handle_receive({{partial, pathtofile, 0, 1024000}, <<"data">>}),
     ok = br_handoff:handle_receive({{partial, pathtofile, 1024000-4, 1024000}, <<"more">>}),
+    em:verify(M).
+
+handoff_receive_filter_test() ->
+    % Setup the settings
+    ok = application:set_env(bloomd_ring, bloomd_local_host, host),
+    ok = application:set_env(bloomd_ring, bloomd_local_port, port),
+
+    M = em:new(),
+    em:strict(M, bloomd, new, [host, port, false], {return, conn}),
+    em:strict(M, bloomd, create, [conn, <<"test">>, []], {return, done}),
+    ok = em:replay(M),
+
+    ok = br_handoff:handle_receive({{filter, <<"test">>}, <<"foo">>}),
     em:verify(M).
 
