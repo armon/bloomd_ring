@@ -50,7 +50,7 @@ encode(Key, Value) ->
     % Pack all the part together, length prefix the header.
     % This makes the assumption that a header is always smaller
     % than 16MB, which seems fairly sane.
-    <<HeaderSize:24/integer, Header/binary, Compressed/binary>>.
+    <<HeaderSize:24, Header/binary, Compressed/binary>>.
 
 
 % Decodes the data that is encoded using encode,
@@ -58,11 +58,10 @@ encode(Key, Value) ->
 -spec decode(binary()) -> term().
 decode(Data) ->
     % Get the header size
-    <<HeaderSize:24/integer, Rest/binary>> = Data,
+    <<HeaderSize:24, Rest/binary>> = Data,
 
     % Unpack the header and compressed body
-    Bits = HeaderSize*8,
-    <<Header:Bits/binary, Compressed/binary>> = Rest,
+    <<Header:HeaderSize/binary, Compressed/binary>> = Rest,
 
     % Unpack everything
     Key = binary_to_term(Header),
