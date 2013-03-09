@@ -10,6 +10,14 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
+    case br_sanity:verify() of
+        true -> start_sup();
+        false ->
+            lager:error("Sanity checking configuration failed! Aborting."),
+            {error, badconfig}
+    end.
+
+start_sup() ->
     case bloomd_ring_sup:start_link() of
         {ok, Pid} ->
             ok = riak_core:register([{vnode_module, br_vnode}]),
