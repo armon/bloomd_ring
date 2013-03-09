@@ -465,7 +465,8 @@ handle_coverage(Cmd={info_filter, _}, _KeySpaces, Sender, State) ->
 handle_exit(_Pid, _Reason, State) ->
     {noreply, State}.
 
-terminate(_Reason, _State) ->
+terminate(_Reason, #state{conn=Conn}) ->
+    bloomd:close_conn(Conn),
     ok.
 
 %%%
