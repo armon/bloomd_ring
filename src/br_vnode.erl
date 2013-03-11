@@ -45,6 +45,9 @@
 % This is the replication factor
 -define(N, 3).
 
+% This is the timeout for talking to bloomd in milliseconds
+% If the command takes more than 1 minute, we should stop
+-define(BLOOMD_TIMEOUT, 60000).
 
 %% API
 start_vnode(I) ->
@@ -66,7 +69,7 @@ init([Partition]) ->
     {ok, PoolSize} = application:get_env(bloomd_ring, bloomd_worker_pool_size),
 
     % Try to connect to the local bloomd without key hashing enabled
-    Conn = bloomd:new(LocalHost, LocalPort, false),
+    Conn = bloomd:new(LocalHost, LocalPort, false, ?BLOOMD_TIMEOUT),
 
     % Configure the worker pool
     Pool = {pool, br_worker, PoolSize, []},

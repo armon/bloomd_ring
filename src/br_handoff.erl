@@ -12,6 +12,11 @@
 % can be made.
 -define(CHUNK_SIZE, 4194304).
 
+% This is the timeout for talking to bloomd in milliseconds
+% Since we are faulting potentially very large filters in, we
+% will be very very generous. 900 sec = 15 minutes.
+-define(BLOOMD_TIMEOUT, 900000).
+
 
 % This method is invoked to perform the hand off of data
 % from the given index. We repeatedly call FoldFun/3 until
@@ -135,7 +140,7 @@ handle_receive({{filter, Name}, _}) ->
     % Connect to the local bloomd
     {ok, LocalHost} = application:get_env(bloomd_ring, bloomd_local_host),
     {ok, LocalPort} = application:get_env(bloomd_ring, bloomd_local_port),
-    Conn = bloomd:new(LocalHost, LocalPort, false),
+    Conn = bloomd:new(LocalHost, LocalPort, false, ?BLOOMD_TIMEOUT),
 
     % Trigger a fault in of the filter
     lager:notice("Faulting in filter ~p", [Name]),
