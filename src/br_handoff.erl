@@ -139,7 +139,10 @@ handle_receive({{filter, Name}, _}) ->
 
     % Trigger a fault in of the filter
     lager:notice("Faulting in filter ~p", [Name]),
-    done = bloomd:create(Conn, Name, []),
+    case bloomd:create(Conn, Name, []) of
+        done -> ok;
+        exists -> ok
+    end,
     ok.
 
 
