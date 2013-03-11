@@ -75,7 +75,7 @@ handoff_receive_filter_test() ->
     ok = application:set_env(bloomd_ring, bloomd_local_port, port),
 
     M = em:new(),
-    em:strict(M, bloomd, new, [host, port, false], {return, conn}),
+    em:strict(M, bloomd, new, [host, port, false, 900000], {return, conn}),
     em:strict(M, bloomd, create, [conn, <<"test">>, []], {return, done}),
     ok = em:replay(M),
 
