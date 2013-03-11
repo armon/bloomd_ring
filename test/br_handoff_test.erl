@@ -44,6 +44,7 @@ handoff_test() ->
 
 handoff_receive_file_test() ->
     M = em:new(),
+    em:strict(M, file, make_dir, ["."], {return, ok}),
     em:strict(M, file, write_file, [pathtofile, data], {return, ok}),
     ok = em:replay(M),
 
@@ -52,6 +53,7 @@ handoff_receive_file_test() ->
 
 handoff_receive_partial_test() ->
     M = em:new(),
+    em:strict(M, file, make_dir, ["."], {return, ok}),
     em:strict(M, file, open, [pathtofile, [write, binary]], {return, {ok, iodev}}),
     em:strict(M, file, position, [iodev, 1024000], {return, {ok, 1024000}}),
     em:strict(M, file, truncate, [iodev], {return, ok}),
@@ -78,5 +80,13 @@ handoff_receive_filter_test() ->
     ok = em:replay(M),
 
     ok = br_handoff:handle_receive({{filter, <<"test">>}, <<"foo">>}),
+    em:verify(M).
+
+make_pathdir_test() ->
+    M = em:new(),
+    em:strict(M, file, make_dir, ["/tmp/bloomd"], {return, ok}),
+    ok = em:replay(M),
+
+    ok = br_handoff:make_pathdir("/tmp/bloomd/file.txt"),
     em:verify(M).
 

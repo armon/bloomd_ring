@@ -86,6 +86,7 @@ decode(Data) ->
 handle_receive({{file, Path}, Bin}) ->
     % Write the entire file at once
     lager:notice("Received handoff of file ~p", [Path]),
+    ok = make_pathdir(Path),
     ok = file:write_file(Path, Bin), ok;
 
 % Attempt to do a partial write.
@@ -95,6 +96,11 @@ handle_receive({{partial, Path, Offset, Size}, Bin}) ->
         undefined ->
             % Open and cache the file handle
             lager:notice("Started partial handoff of file ~p", [Path]),
+
+            % Make the path first
+            ok = make_pathdir(Path),
+
+            % Open the file handle and cache
             {ok, IoDev} = file:open(Path, [write, binary]),
             put({partial, Path}, IoDev),
 
@@ -186,5 +192,14 @@ handoff_file(Dir, File, FoldFun, Accum) ->
         _ ->
             lager:notice("Ignoring file ~p in ~p for handoff", [File, Dir]),
             Accum
+    end.
+
+% Ensures the directory for the path is made
+make_pathdir(Path) ->
+    Dir = filename:dirname(Path),
+    case file:make_dir(Dir) of
+        ok -> ok;
+        {error, eexist} -> ok;
+        X -> X
     end.
 
