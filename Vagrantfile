@@ -12,6 +12,7 @@ apt-get install -y build-essential
 apt-get install -y git-core
 apt-get install -y libtool
 apt-get install -y telnet
+apt-get install -y screen
 
 # Compile Erlang from source
 if [ ! -f /usr/local/bin/erl ]; then
@@ -34,13 +35,9 @@ if [ ! -f /usr/local/bin/erl ]; then
 fi
 SCRIPT
 
-Vagrant::Config.run do |config|
+Vagrant.configure("2") do |config|
   config.vm.box = "precise64"
   config.vm.provision :shell, :inline => $setup
-  config.vm.network :hostonly, "33.33.36.10"
-end
-
-Vagrant.configure("2") do |config|
   config.vm.network :forwarded_port,
     guest: 22,
     host:  2456,
@@ -50,5 +47,17 @@ Vagrant.configure("2") do |config|
     p.vmx["numvcpus"] = "2"
     p.vmx["coresPerSocket"] = "2"
     p.vmx["memsize"] = "1024"
+  end
+
+  config.vm.define :n1 do |x|
+      x.vm.network :private_network, ip: "33.33.36.10"
+  end
+
+  config.vm.define :n2 do |y|
+      y.vm.network :private_network, ip: "33.33.36.11"
+  end
+
+  config.vm.define :n3 do |z|
+      z.vm.network :private_network, ip: "33.33.36.12"
   end
 end
