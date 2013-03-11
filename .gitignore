@@ -3,6 +3,7 @@
 deps/*
 ebin/*
 rel/bloomd
+rel/node*
 dev
 apps/bloomd/src/*
 .vagrant
