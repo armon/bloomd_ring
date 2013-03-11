@@ -20,9 +20,11 @@ devrel: rel
 	ln -sf $(abspath ./ebin) rel/$(APP)/lib/$(APP)-*
 
 rel: compile
+	-ps aux | grep epmd | grep -v grep | awk '{ print $$2 }' | xargs kill
 	./rebar generate -f overlay_vars=vars/$(ENVIRONMENT).config
 
 relcluster: compile
+	-ps aux | grep epmd | grep -v grep | awk '{ print $$2 }' | xargs kill
 	./rebar generate -f target_dir=node1 overlay_vars=vars/node1.config
 	./rebar generate -f target_dir=node2 overlay_vars=vars/node2.config
 	./rebar generate -f target_dir=node3 overlay_vars=vars/node3.config
