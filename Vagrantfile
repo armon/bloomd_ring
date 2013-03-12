@@ -8,7 +8,7 @@ apt-get update
 # Install the things we need to build
 apt-get install -y autoconf
 apt-get install -y automake
-apt-get install -y build-essential
+apt-get install -y build-essential scons
 apt-get install -y git-core
 apt-get install -y libtool
 apt-get install -y telnet
@@ -33,6 +33,25 @@ if [ ! -f /usr/local/bin/erl ]; then
 
   popd
 fi
+
+# Compile bloomd from source
+if [ ! -f /usr/bin/bloomd ]; then
+    pushd /tmp
+
+    # Get bloomd
+    git clone --depth 1 https://github.com/armon/bloomd
+
+    # Build it
+    cd bloomd
+    scons
+
+    # Move it into place
+    chmod +x bloomd
+    cp bloomd /usr/bin
+
+    popd
+fi
+
 SCRIPT
 
 Vagrant.configure("2") do |config|
