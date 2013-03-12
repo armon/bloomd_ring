@@ -125,10 +125,14 @@ maybe_repair(Filter) ->
 % Checks if a repair is necessary
 check_repair(Filter, Grace) ->
     % Wait for a grace period
+    lager:notice("Waiting for grace period to repair ~p", [Filter]),
     timer:sleep(Grace),
 
     % List the slice info
-    List = list_slices(Filter),
+    List = case list_slices(Filter) of
+        {ok, L} -> L;
+        X -> X
+    end,
 
     % Get the expected number of partitions
     P = br_util:num_partitions(),
@@ -141,16 +145,16 @@ check_repair(Filter, Grace) ->
 
         % If more than half believe the filter does not exist but
         % some do believe it exists, we issue a drop
-        #counter{exist=E, not_exist=NE} when NE > (P / 2), E > 0 ->
-            lager:notice("Issuing drop as part of read repair for ~p!", [Filter]),
+        C=#counter{exist=E, not_exist=NE} when NE > (P / 2), E > 0 ->
+            lager:notice("Issuing drop as part of read repair for ~p! Counts: ~p", [Filter, C]),
             bloomd_ring:drop(Filter), {repair, drop};
 
         % The complement is that if more than half think it exists,
         % but some do not believe it exists, we issue a create
-        #counter{exist=E, not_exist=NE} when E > (P / 2), NE > 0 ->
+        C=#counter{exist=E, not_exist=NE} when E > (P / 2), NE > 0 ->
             Options = create_options(List),
-            lager:notice("Issuing create as part of read repair for ~p with options ~p!",
-                         [Filter, Options]),
+            lager:notice("Issuing create as part of read repair for ~p with options ~p! Counts: ~p",
+                         [Filter, Options, C]),
             bloomd_ring:create(Filter, Options),
             {repair, create};
 
@@ -266,7 +270,7 @@ check_repair_unknown_test() ->
     % Spawn a helper
     ReqId = 1,
     P = self(),
-    spawn(fun() -> P ! {ReqId, [{ok, tubez}, {error, no_filter}]} end),
+    spawn(fun() -> P ! {ReqId, {ok, [{ok, tubez}, {error, no_filter}]}} end),
 
     % Mock the call to br_util:num_partitions
     M = em:new(),
@@ -281,7 +285,7 @@ check_repair_drop_test() ->
     % Spawn a helper
     ReqId = 1,
     P = self(),
-    spawn(fun() -> P ! {ReqId, [{ok, tubez}, {error, no_filter}, {error, no_filter}]} end),
+    spawn(fun() -> P ! {ReqId, {ok, [{ok, tubez}, {error, no_filter}, {error, no_filter}]}} end),
 
     % Mock the call to br_util:num_partitions
     M = em:new(),
@@ -299,7 +303,7 @@ check_repair_create_test() ->
     ReqId = 1,
     P = self(),
     Info = [{1, [{capacity, 1000}, {probability, 0.002}]}],
-    spawn(fun() -> P ! {ReqId, [{ok, Info}, {ok, tubez}, {error, no_filter}]} end),
+    spawn(fun() -> P ! {ReqId, {ok, [{ok, Info}, {ok, tubez}, {error, no_filter}]}} end),
 
     % Expected filter settings
     ExpectOpt = [{capacity, 3000}, {probability, 0.002}],
@@ -320,7 +324,7 @@ check_repair_valid_test() ->
     % Spawn a helper
     ReqId = 1,
     P = self(),
-    spawn(fun() -> P ! {ReqId, [{ok, tubez}, {ok, tubez}, {ok, tubez}]} end),
+    spawn(fun() -> P ! {ReqId, {ok, [{ok, tubez}, {ok, tubez}, {ok, tubez}]}} end),
 
     % Mock the call to br_util:num_partitions
     M = em:new(),
