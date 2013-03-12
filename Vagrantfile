@@ -13,6 +13,8 @@ apt-get install -y git-core
 apt-get install -y libtool
 apt-get install -y telnet
 apt-get install -y screen
+apt-get install -y htop
+apt-get install -y strace
 
 # Compile Erlang from source
 if [ ! -f /usr/local/bin/erl ]; then
@@ -51,6 +53,15 @@ if [ ! -f /usr/bin/bloomd ]; then
 
     popd
 fi
+
+# Set file limits
+RES=`grep 32000 /etc/security/limits.conf`
+if [ ! $RES ]; then
+    echo "*	soft    nofile 	32000" >> /etc/security/limits.conf
+    echo "*	hard nofile 	32000" >> /etc/security/limits.conf
+    echo "ulimit -n 32000" >> /home/vagrant/.bashrc
+fi
+
 
 SCRIPT
 
