@@ -10,8 +10,6 @@
          collapse_list_info/1
         ]).
 
-% Limit of phash2, 2^32
--define(HASH_LIMIT, 4294967296).
 
 % Implements the mathematical ceiling operator
 ceiling(X) when X < 0 ->
@@ -38,9 +36,8 @@ keyslice(Key) ->
 % Given a key and the number of partitions, returns which
 % slice owns the given key
 keyslice(Key, Partitions) when is_binary(Key), is_integer(Partitions) ->
-    % Just use erlang:phash2 for distribution.
-    % We want something that is fast and reasonably distributed
-    Digest = erlang:phash2(Key, ?HASH_LIMIT),
+    % MD5 is reasonably fast and does a good job distributing
+    <<Digest:128/integer>> = crypto:md5(Key),
 
     % Mod by the ring size
     Digest rem Partitions.
@@ -155,16 +152,16 @@ keyslice_1_test() ->
     em:strict(M, riak_core_ring_manager, get_my_ring, [], {return, {ok, Ring}}),
     ok = em:replay(M),
 
-    ?assertEqual(22, keyslice(<<"bar">>)),
+    ?assertEqual(50, keyslice(<<"bar">>)),
     em:verify(M).
 
 keyslice_2_test() ->
     ?assertEqual(0, keyslice(<<"foo">>, 1)),
     ?assertEqual(0, keyslice(<<"bar">>, 1)),
     ?assertEqual(0, keyslice(<<"baz">>, 1)),
-    ?assertEqual(56, keyslice(<<"foo">>, 64)),
-    ?assertEqual(22, keyslice(<<"bar">>, 64)),
-    ?assertEqual(39, keyslice(<<"baz">>, 64)).
+    ?assertEqual(24, keyslice(<<"foo">>, 64)),
+    ?assertEqual(50, keyslice(<<"bar">>, 64)),
+    ?assertEqual(8, keyslice(<<"baz">>, 64)).
 
 merge_slice_info_test() ->
     Info1 = [{probability, 0.001}, {bytes, 100}, {capacity, 1000}, {size, 2000}],
