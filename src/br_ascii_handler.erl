@@ -30,6 +30,8 @@
 -define(NO_RESP, <<"No\n">>).
 -define(VALID_FILT_RE, "^[^ \t\n\r]{1,200}$").
 
+% Size of our send and receive buffers
+-define(BUF_SIZE, 65536).
 
 -ifdef(TEST).
 -compile(export_all).
@@ -52,7 +54,7 @@ handle_call(Msg, _From, State) ->
 
 % Wait for the start message, set the socket to active
 handle_cast(start, S=#state{socket=Socket}) ->
-    inet:setopts(Socket, [{active, true}]),
+    inet:setopts(Socket, [{active, true}, {nodelay, true}, {recbuf, ?BUF_SIZE}, {sndbuf, ?BUF_SIZE}]),
     {noreply, S}.
 
 
