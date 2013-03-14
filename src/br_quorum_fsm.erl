@@ -1,9 +1,9 @@
 -module(br_quorum_fsm).
 -behavior(gen_fsm).
--export([start_link/4, start_op/2]).
+-export([start_link/1, start_op/2]).
 -export([init/1, handle_info/3, handle_event/3, handle_sync_event/4,
          code_change/4, terminate/3]).
--export([prepare/2, executing/2, waiting/2, repairing/2]).
+-export([initialize/2, waiting/2, repairing/2]).
 
 
 -record(state, {
@@ -15,8 +15,6 @@
         op,
         % Operation args
         args,
-        % Slice to operate on
-        slice,
         % Preflsit
         preflist,
         % Responses
@@ -37,17 +35,23 @@
 % to the client.
 -define(RW, 2).
 
+% Vnode to talk to
+-define(MASTER, br_vnode_master).
+
+% Milliseconds to wait for an available quorum FSM
+-define(BLOCK_TIME, 5000).
 
 %%%
 % Start API
 %%%
 
-start_link(ReqId, From, Op, Args) ->
-    gen_fsm:start_link(?MODULE, [ReqId, From, Op, Args], []).
+start_link(Args) ->
+    gen_fsm:start_link(?MODULE, [], []).
 
 start_op(Op, Args) ->
+    Pid = poolboy:checkout(quorum_pool, true, ?BLOCK_TIME),
     ReqId = erlang:make_ref(),
-    {ok, _} = br_quorum_fsm_sup:start_fsm([ReqId, self(), Op, Args]),
+    ok = gen_fsm:send_event(Pid, {init, ReqId, self(), Op, Args}),
     {ok, ReqId}.
 
 
@@ -55,9 +59,8 @@ start_op(Op, Args) ->
 % Gen FSM API
 %%%
 
-init([ReqId, From, Op, Args]) ->
-    State = #state{req_id=ReqId, from=From, op=Op, args=Args},
-    {ok, prepare, State, 0}.
+init([]) ->
+    {ok, initialize, undefined, hibernate}.
 
 handle_info(Info, StateName, State) ->
     lager:warning("Unexpected message: ~p", [Info]),
@@ -82,29 +85,28 @@ terminate(_Reason, _StateName, _State) ->
 % FSM States
 %%%
 
-% Prepares for execution, gets the preflist ready
-prepare(timeout, State=#state{args={FilterName, Key}}) ->
+initialize({init, ReqId, From, Op, Args={FilterName, Key}}, _State) ->
+    % Get the ring
+    {ok, Ring} = riak_core_ring_manager:get_my_ring(),
+
     % Determine the slice
-    Slice = br_util:keyslice(Key),
+    P = riak_core_ring:num_partitions(Ring),
+    Slice = br_util:keyslice(Key, P),
 
     % Get the preflist
     DocIdx = br_util:hash_slice(FilterName, Slice),
-    Preflist2 = riak_core_apl:get_primary_apl(DocIdx, ?N, bloomd),
-    Preflist = [Idx || {Idx, _type} <- Preflist2],
+    {Preflist, _} = lists:split(?N, riak_core_ring:preflist(DocIdx, Ring)),
 
-    % Proceed wiht preflist and slice
-    {next_state, executing, State#state{preflist=Preflist, slice=Slice}, 0}.
-
-
--define(MASTER, br_vnode_master).
-executing(timeout, State=#state{preflist=Pref, op=Op, args={FilterName, Key}, slice=Slice}) ->
+    % Get the command
     Cmd = case Op of
         check -> {check_filter, FilterName, Slice, Key};
         set -> {set_filter, FilterName, Slice, Key}
     end,
-    riak_core_vnode_master:command(Pref, Cmd, {fsm, undefined, self()}, ?MASTER),
-    {next_state, waiting, State, ?WAIT_TIMEOUT}.
+    riak_core_vnode_master:command(Preflist, Cmd, {fsm, undefined, self()}, ?MASTER),
 
+    % Create the state and wait
+    State = #state{req_id=ReqId, from=From, op=Op, args=Args, preflist=Preflist},
+    {next_state, waiting, State, ?WAIT_TIMEOUT}.
 
 waiting(timeout, State=#state{req_id=ReqId, from=From}) ->
     lager:warning("Timed out waiting for all responses!"),
@@ -183,7 +185,10 @@ repairing(timeout, State=#state{resp=Resps, op=Op, args={Filter, Key}}) ->
         % If we don't match any condition, do nothing
         _ -> ok
     end,
-    {stop, normal, State}.
+
+    % Check into the pool
+    poolboy:checkin(quorum_pool, self()),
+    {next_state, initialize, undefined, hibernate}.
 
 
 %%%
