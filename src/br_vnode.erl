@@ -82,7 +82,7 @@ init([Partition]) ->
 % Handles the check key command. This can be sent down to bloomd
 % directly, since we know exactly which slice handles it.
 %%%
-handle_command({check_filter, FilterName, Slice, Key}, Sender, State) ->
+handle_command({check_filter, FilterName, Slice, Key}, Sender, State=#state{idx=Idx, conn=Conn}) ->
     % Make use of pipelining instead of blocking the v-node
     Handle = fun(Res) ->
         % Get the response
@@ -96,10 +96,10 @@ handle_command({check_filter, FilterName, Slice, Key}, Sender, State) ->
     end,
 
     % Convert into the proper names
-    Name = filter_slice_name(State#state.idx, FilterName, Slice),
+    Name = filter_slice_name(Idx, FilterName, Slice),
 
     % Query bloomd
-    F = bloomd:filter(State#state.conn, Name),
+    F = bloomd:filter(Conn, Name),
     ok = bloomd:check(F, Key, Handle),
 
     % Do not respond, other process will do it
@@ -110,7 +110,7 @@ handle_command({check_filter, FilterName, Slice, Key}, Sender, State) ->
 % Handles the set key command. This can be sent down to bloomd
 % directly, since we know exactly which slice handles it.
 %%%
-handle_command({set_filter, FilterName, Slice, Key}, Sender, State) ->
+handle_command({set_filter, FilterName, Slice, Key}, Sender, State=#state{idx=Idx, conn=Conn}) ->
     % Make use of pipelining instead of blocking the v-node
     Handle = fun(Res) ->
         % Get the response
@@ -124,10 +124,10 @@ handle_command({set_filter, FilterName, Slice, Key}, Sender, State) ->
     end,
 
     % Convert into the proper names
-    Name = filter_slice_name(State#state.idx, FilterName, Slice),
+    Name = filter_slice_name(Idx, FilterName, Slice),
 
     % Query bloomd
-    F = bloomd:filter(State#state.conn, Name),
+    F = bloomd:filter(Conn, Name),
     ok = bloomd:set(F, Key, Handle),
 
     % Do not respond, other process will do it
