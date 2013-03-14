@@ -84,14 +84,7 @@ init([Partition]) ->
 %%%
 handle_command({check_filter, FilterName, Slice, Key}, Sender, State) ->
     % Make use of pipelining instead of blocking the v-node
-    spawn(fun() ->
-        % Convert into the proper names
-        Name = filter_slice_name(State#state.idx, FilterName, Slice),
-
-        % Query bloomd
-        F = bloomd:filter(State#state.conn, Name),
-        Res = bloomd:check(F, Key),
-
+    Handle = fun(Res) ->
         % Get the response
         Resp = case Res of
             {ok, [V]} -> {ok, V};
@@ -100,7 +93,14 @@ handle_command({check_filter, FilterName, Slice, Key}, Sender, State) ->
 
         % Respond
         riak_core_vnode:reply(Sender, Resp)
-    end),
+    end,
+
+    % Convert into the proper names
+    Name = filter_slice_name(State#state.idx, FilterName, Slice),
+
+    % Query bloomd
+    F = bloomd:filter(State#state.conn, Name),
+    ok = bloomd:check(F, Key, Handle),
 
     % Do not respond, other process will do it
     {noreply, State};
@@ -112,14 +112,7 @@ handle_command({check_filter, FilterName, Slice, Key}, Sender, State) ->
 %%%
 handle_command({set_filter, FilterName, Slice, Key}, Sender, State) ->
     % Make use of pipelining instead of blocking the v-node
-    spawn(fun() ->
-        % Convert into the proper names
-        Name = filter_slice_name(State#state.idx, FilterName, Slice),
-
-        % Query bloomd
-        F = bloomd:filter(State#state.conn, Name),
-        Res = bloomd:set(F, Key),
-
+    Handle = fun(Res) ->
         % Get the response
         Resp = case Res of
             {ok, [V]} -> {ok, V};
@@ -128,7 +121,14 @@ handle_command({set_filter, FilterName, Slice, Key}, Sender, State) ->
 
         % Respond
         riak_core_vnode:reply(Sender, Resp)
-    end),
+    end,
+
+    % Convert into the proper names
+    Name = filter_slice_name(State#state.idx, FilterName, Slice),
+
+    % Query bloomd
+    F = bloomd:filter(State#state.conn, Name),
+    ok = bloomd:set(F, Key, Handle),
 
     % Do not respond, other process will do it
     {noreply, State};
