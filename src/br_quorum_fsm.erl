@@ -194,14 +194,16 @@ repairing(timeout, State=#state{resp=Resps, op=Op, args={Filter, Key}}) ->
 % of [{Count, Response}].
 -spec response_counts([term()]) -> [{integer(), term()}].
 response_counts(Responses) ->
-    % Get the aggregate count
-    Counts = lists:foldl(fun(Resp, Accum) ->
-        dict:update_counter(Resp, 1, Accum)
-    end, dict:new(), Responses),
+    Counted = count_occurences(lists:sort(Responses), []),
+    lists:reverse(lists:sort(Counted)).
 
-    % Sort by common response
-    lists:reverse(lists:sort([{Count, Resp} || {Resp, Count} <- dict:to_list(Counts)])).
-
+% Counts the occurences of a term
+count_occurences([Head | Tail], [{Count, Head} | Acc]) ->
+    count_occurences(Tail, [{Count+1, Head} | Acc]);
+count_occurences([Head | Tail], Acc) ->
+    count_occurences(Tail, [{1, Head} | Acc]);
+count_occurences([], Acc) ->
+    Acc.
 
 % Checks for consensus
 % Returns {Have Consensus, Value}
