@@ -15,6 +15,15 @@
 ## Increase number of concurrent ports/sockets
 -env ERL_MAX_PORTS 32000
 
-## Tweak GC to run more often
--env ERL_FULLSWEEP_AFTER 20
+## Tweak GC to run less often
+-env ERL_FULLSWEEP_AFTER 40
+
+## Enable binding threads to CPU cores
+#+sbt db
+
+# Prevent fast migration of work
++swt high
+
+# Allow for more busy waiting
++sbwt long
 
