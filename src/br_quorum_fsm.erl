@@ -49,9 +49,10 @@ start_link(Args) ->
     gen_fsm:start_link(?MODULE, [], []).
 
 start_op(Op, Args) ->
-    Pid = poolboy:checkout(quorum_pool, true, ?BLOCK_TIME),
     ReqId = erlang:make_ref(),
+    Pid = poolboy:checkout(quorum_pool, true, ?BLOCK_TIME),
     ok = gen_fsm:send_event(Pid, {init, ReqId, self(), Op, Args}),
+    erlang:yield(),
     {ok, ReqId}.
 
 
@@ -103,6 +104,7 @@ initialize({init, ReqId, From, Op, Args={FilterName, Key}}, _State) ->
         set -> {set_filter, FilterName, Slice, Key}
     end,
     riak_core_vnode_master:command(Preflist, Cmd, {fsm, undefined, self()}, ?MASTER),
+    erlang:yield(),
 
     % Create the state and wait
     State = #state{req_id=ReqId, from=From, op=Op, args=Args, preflist=Preflist},
@@ -127,6 +129,7 @@ waiting(Resp, State=#state{preflist=Pref, resp=Buf, from=From, req_id=ReqId}) ->
                 false ->
                     [{_, Common}|_] = response_counts(NewBuf),
                     From ! {ReqId, Common},
+                    erlang:yield(),
                     NewState#state{responded=true};
 
                 _ -> State
@@ -139,6 +142,7 @@ waiting(Resp, State=#state{preflist=Pref, resp=Buf, from=From, req_id=ReqId}) ->
             NS = case consensus(NewBuf) of
                 {true, V} ->
                     From ! {ReqId, V},
+                    erlang:yield(),
                     NewState#state{responded=true};
 
                 % No consensus, wait for the final replies

@@ -92,7 +92,8 @@ handle_command({check_filter, FilterName, Slice, Key}, Sender, State=#state{idx=
         end,
 
         % Respond
-        riak_core_vnode:reply(Sender, Resp)
+        riak_core_vnode:reply(Sender, Resp),
+        erlang:yield()
     end,
 
     % Convert into the proper names
@@ -120,7 +121,8 @@ handle_command({set_filter, FilterName, Slice, Key}, Sender, State=#state{idx=Id
         end,
 
         % Respond
-        riak_core_vnode:reply(Sender, Resp)
+        riak_core_vnode:reply(Sender, Resp),
+        erlang:yield()
     end,
 
     % Convert into the proper names
