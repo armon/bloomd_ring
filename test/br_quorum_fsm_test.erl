@@ -24,6 +24,7 @@ ignore_msg_test() ->
     em:strict(M, riak_core_vnode_master, command,
               [Pref, {check_filter, <<"foo">>, 12, <<"bar">>},
                fun({fsm, undefined, _}) -> true end, br_vnode_master]),
+    em:strict(M, poolboy, checkin, [quorum_pool, em:zelf()]),
     ok = em:replay(M),
 
     {_, Pid} = new_fsm(check, {<<"foo">>, <<"bar">>}),
@@ -52,6 +53,7 @@ timeout_test() ->
     em:strict(M, riak_core_vnode_master, command,
               [Pref, {set_filter, <<"foo">>, 12, <<"bar">>},
                fun({fsm, undefined, _}) -> true end, br_vnode_master]),
+    em:strict(M, poolboy, checkin, [quorum_pool, em:zelf()]),
     ok = em:replay(M),
 
     {ReqId, Pid} = new_fsm(set, {<<"foo">>, <<"bar">>}),
@@ -66,6 +68,7 @@ timeout_test() ->
     after 200 ->
         ?assertEqual(false, true)
     end,
+    timer:sleep(20),
     kill_fsm(Pid),
     em:verify(M).
 
@@ -82,6 +85,7 @@ fast_consensus_test() ->
     em:strict(M, riak_core_vnode_master, command,
               [Pref, {set_filter, <<"foo">>, 12, <<"bar">>},
                fun({fsm, undefined, _}) -> true end, br_vnode_master]),
+    em:strict(M, poolboy, checkin, [quorum_pool, em:zelf()]),
     ok = em:replay(M),
 
     {ReqId, Pid} = new_fsm(set, {<<"foo">>, <<"bar">>}),
@@ -98,6 +102,7 @@ fast_consensus_test() ->
     after 200 ->
         ?assertEqual(false, true)
     end,
+    timer:sleep(20),
     kill_fsm(Pid),
     em:verify(M).
 
@@ -114,7 +119,8 @@ no_consensus_test() ->
     em:strict(M, riak_core_vnode_master, command,
               [Pref, {set_filter, <<"foo">>, 12, <<"bar">>},
                fun({fsm, undefined, _}) -> true end, br_vnode_master]),
-        ok = em:replay(M),
+    em:strict(M, poolboy, checkin, [quorum_pool, em:zelf()]),
+    ok = em:replay(M),
 
     {ReqId, Pid} = new_fsm(set, {<<"foo">>, <<"bar">>}),
 
@@ -130,6 +136,7 @@ no_consensus_test() ->
     after 200 ->
         ?assertEqual(false, true)
     end,
+    timer:sleep(20),
     kill_fsm(Pid),
     em:verify(M).
 
