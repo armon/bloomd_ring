@@ -30,7 +30,7 @@ start_socket(Pid) ->
     ?_test(
         begin
             M = em:new(),
-            em:strict(M, inet, setopts, [undefined, [{active, true}]]),
+            em:strict(M, inet, setopts, [undefined, [{active, once}, {nodelay, true}]]),
             ok = em:replay(M),
 
             gen_server:cast(Pid, start),
@@ -52,6 +52,7 @@ data_receive(Pid) ->
         begin
             M = em:new(),
             em:strict(M, gen_tcp, send, [undefined, [<<"Client Error: ">>, <<"Command not supported">>, <<"\n">>]]),
+            em:strict(M, inet, setopts, [undefined, [{active, once}]]),
             ok = em:replay(M),
 
             Pid ! {tcp, undefined, [<<"tubez\n">>]},

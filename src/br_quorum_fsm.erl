@@ -45,7 +45,7 @@
 % Start API
 %%%
 
-start_link(Args) ->
+start_link(_Args) ->
     gen_fsm:start_link(?MODULE, [], []).
 
 start_op(Op, Args) ->
@@ -156,7 +156,7 @@ waiting(Resp, State=#state{preflist=Pref, resp=Buf, from=From, req_id=ReqId}) ->
 
 
 % Handles doing a read-repair after we've responded to the client
-repairing(timeout, State=#state{resp=Resps, op=Op, args={Filter, Key}}) ->
+repairing(timeout, #state{resp=Resps, op=Op, args={Filter, Key}}) ->
     % Count all the responses
     Counted = response_counts(Resps),
     case Counted of
