@@ -2,7 +2,16 @@
 -include_lib("eunit/include/eunit.hrl").
 -compile(export_all).
 
+drain_queue() ->
+    receive
+        _X -> drain_queue()
+    after 10 ->
+        ok
+    end.
+
 new_fsm(Op, Args) ->
+    % Drain the message queue
+    drain_queue(),
     ReqId = erlang:make_ref(),
     {ok, Pid} = br_quorum_fsm:start_link([]),
     ok = gen_fsm:send_event(Pid, {init, ReqId, self(), Op, Args}),
@@ -36,7 +45,7 @@ ignore_msg_test() ->
     catch
         exit:_ -> ok
     end,
-    timer:sleep(50),
+    timer:sleep(80),
     kill_fsm(Pid),
     em:verify(M).
 
