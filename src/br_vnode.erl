@@ -82,9 +82,16 @@ init([Partition]) ->
 % Handles the check key command. This can be sent down to bloomd
 % directly, since we know exactly which slice handles it.
 %%%
-handle_command({check_filter, FilterName, Slice, Key}, Sender, State=#state{idx=Idx, conn=Conn}) ->
+handle_command({check_filter, FilterName, Slice, Key}, Sender, State) ->
     % Make use of pipelining instead of blocking the v-node
-    Handle = fun(Res) ->
+    spawn(fun() ->
+        % Convert into the proper names
+        Name = filter_slice_name(State#state.idx, FilterName, Slice),
+
+        % Query bloomd
+        F = bloomd:filter(State#state.conn, Name),
+        Res = bloomd:check(F, Key),
+
         % Get the response
         Resp = case Res of
             {ok, [V]} -> {ok, V};
@@ -94,14 +101,7 @@ handle_command({check_filter, FilterName, Slice, Key}, Sender, State=#state{idx=
         % Respond
         riak_core_vnode:reply(Sender, Resp),
         erlang:yield()
-    end,
-
-    % Convert into the proper names
-    Name = filter_slice_name(Idx, FilterName, Slice),
-
-    % Query bloomd
-    F = bloomd:filter(Conn, Name),
-    ok = bloomd:check(F, Key, Handle),
+    end),
 
     % Do not respond, other process will do it
     {noreply, State};
@@ -111,9 +111,16 @@ handle_command({check_filter, FilterName, Slice, Key}, Sender, State=#state{idx=
 % Handles the set key command. This can be sent down to bloomd
 % directly, since we know exactly which slice handles it.
 %%%
-handle_command({set_filter, FilterName, Slice, Key}, Sender, State=#state{idx=Idx, conn=Conn}) ->
+handle_command({set_filter, FilterName, Slice, Key}, Sender, State) ->
     % Make use of pipelining instead of blocking the v-node
-    Handle = fun(Res) ->
+    spawn(fun() ->
+        % Convert into the proper names
+        Name = filter_slice_name(State#state.idx, FilterName, Slice),
+
+        % Query bloomd
+        F = bloomd:filter(State#state.conn, Name),
+        Res = bloomd:set(F, Key),
+
         % Get the response
         Resp = case Res of
             {ok, [V]} -> {ok, V};
@@ -123,14 +130,7 @@ handle_command({set_filter, FilterName, Slice, Key}, Sender, State=#state{idx=Id
         % Respond
         riak_core_vnode:reply(Sender, Resp),
         erlang:yield()
-    end,
-
-    % Convert into the proper names
-    Name = filter_slice_name(Idx, FilterName, Slice),
-
-    % Query bloomd
-    F = bloomd:filter(Conn, Name),
-    ok = bloomd:set(F, Key, Handle),
+    end),
 
     % Do not respond, other process will do it
     {noreply, State};
