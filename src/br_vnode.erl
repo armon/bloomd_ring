@@ -84,27 +84,27 @@ init([Partition]) ->
 %%%
 handle_command({check_filter, FilterName, Slice, Key}, Sender, State) ->
     % Make use of pipelining instead of blocking the v-node
-    spawn(fun() ->
-        % Convert into the proper names
-        Name = filter_slice_name(State#state.idx, FilterName, Slice),
+    %spawn(fun() ->
+    %    % Convert into the proper names
+    %    Name = filter_slice_name(State#state.idx, FilterName, Slice),
 
-        % Query bloomd
-        F = bloomd:filter(State#state.conn, Name),
-        Res = bloomd:check(F, Key),
+    %    % Query bloomd
+    %    F = bloomd:filter(State#state.conn, Name),
+    %    Res = bloomd:check(F, Key),
 
-        % Get the response
-        Resp = case Res of
-            {ok, [V]} -> {ok, V};
-            {error, E} -> {error, E}
-        end,
+    %    % Get the response
+    %    Resp = case Res of
+    %        {ok, [V]} -> {ok, V};
+    %        {error, E} -> {error, E}
+    %    end,
 
-        % Respond
-        riak_core_vnode:reply(Sender, Resp),
-        erlang:yield()
-    end),
+    %    % Respond
+    %    riak_core_vnode:reply(Sender, Resp),
+    %    erlang:yield()
+    %end),
 
     % Do not respond, other process will do it
-    {noreply, State};
+    {reply, {ok, false}, State};
 
 
 %%%
@@ -113,27 +113,27 @@ handle_command({check_filter, FilterName, Slice, Key}, Sender, State) ->
 %%%
 handle_command({set_filter, FilterName, Slice, Key}, Sender, State) ->
     % Make use of pipelining instead of blocking the v-node
-    spawn(fun() ->
-        % Convert into the proper names
-        Name = filter_slice_name(State#state.idx, FilterName, Slice),
+    %spawn(fun() ->
+    %    % Convert into the proper names
+    %    Name = filter_slice_name(State#state.idx, FilterName, Slice),
 
-        % Query bloomd
-        F = bloomd:filter(State#state.conn, Name),
-        Res = bloomd:set(F, Key),
+    %    % Query bloomd
+    %    F = bloomd:filter(State#state.conn, Name),
+    %    Res = bloomd:set(F, Key),
 
-        % Get the response
-        Resp = case Res of
-            {ok, [V]} -> {ok, V};
-            {error, E} -> {error, E}
-        end,
+    %    % Get the response
+    %    Resp = case Res of
+    %        {ok, [V]} -> {ok, V};
+    %        {error, E} -> {error, E}
+    %    end,
 
-        % Respond
-        riak_core_vnode:reply(Sender, Resp),
-        erlang:yield()
-    end),
+    %    % Respond
+    %    riak_core_vnode:reply(Sender, Resp),
+    %    erlang:yield()
+    %end),
 
     % Do not respond, other process will do it
-    {noreply, State};
+    {reply, {ok, false}, State};
 
 
 %%%
