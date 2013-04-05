@@ -22,7 +22,7 @@ apt-get install -y openssl libssl-dev
 if [ ! -f /usr/local/bin/erl ]; then
   pushd /tmp
 
-  if [ ! -f otp_src_R15B03-1.tar.gz]; then
+  if [ ! -f otp_src_R15B03-1.tar.gz ]; then
       # Download Erlang
       wget --progress=dot -e dotbytes=1M http://www.erlang.org/download/otp_src_R15B03-1.tar.gz
 
