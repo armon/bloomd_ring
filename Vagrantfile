@@ -84,8 +84,8 @@ Vagrant.configure("2") do |config|
     id: "ssh"
 
   config.vm.provider :vmware_fusion do |p|
-    p.vmx["numvcpus"] = "4"
-    p.vmx["coresPerSocket"] = "4"
+    p.vmx["numvcpus"] = "2"
+    p.vmx["coresPerSocket"] = "2"
     p.vmx["memsize"] = "2048"
   end
 
